@@ -4,6 +4,8 @@ import 'purchase_orders_page.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'settings.dart';
+import 'profile_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({Key? key}) : super(key: key);
@@ -36,12 +38,13 @@ class _LoginPageState extends State<LoginPage> {
       try {
         final data = jsonDecode(response.body);
         final token = data['access_token'];
+        final userData = data['user']; // Assuming the user data is here
 
         if (token != null && token.isNotEmpty) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('auth_token', token);
 
-          final  userid=decodeToken(token);
+          final userid = decodeToken(token);
           await prefs.setString('userid', userid);
           Navigator.pushReplacement(
             context,
@@ -60,11 +63,10 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -76,10 +78,7 @@ class _LoginPageState extends State<LoginPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset(
-                'assets/images/my_logo.png',
-                height: 200,
-              ),
+              Image.asset('assets/images/my_logo.png', height: 200),
               const SizedBox(height: 20),
               Text(
                 "Bienvenue",
@@ -112,8 +111,9 @@ class _LoginPageState extends State<LoginPage> {
                       label: 'Password',
                       icon: Icons.lock_outline,
                       obscureText: true,
-                      textInputAction: TextInputAction.done, // 👈 enables Enter key to act
-                      onFieldSubmitted: (_) => _login(),     // 👈 triggers _login
+                      textInputAction:
+                          TextInputAction.done, // 👈 enables Enter key to act
+                      onFieldSubmitted: (_) => _login(), // 👈 triggers _login
                       validator: (value) {
                         if (value == null || value.length < 6) {
                           return 'Password must be at least 6 characters';
@@ -138,7 +138,8 @@ class _LoginPageState extends State<LoginPage> {
                           style: GoogleFonts.poppins(
                             textStyle: const TextStyle(
                               fontSize: 18,
-                              color: Colors.white, // 👈 This works correctly now
+                              color:
+                                  Colors.white, // 👈 This works correctly now
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -177,7 +178,10 @@ class _LoginPageState extends State<LoginPage> {
         prefixIcon: Icon(icon),
         filled: true,
         fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -185,16 +189,75 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
   }
- decodeToken(String token) {
-  final parts = token.split('.');
-  if (parts.length != 3) {
-    print('Invalid token');
-    return;
+
+  decodeToken(String token) {
+    final parts = token.split('.');
+    if (parts.length != 3) {
+      print('Invalid token');
+      return;
+    }
+
+    final payload = base64Url.normalize(parts[1]);
+    final payloadMap = json.decode(utf8.decode(base64Url.decode(payload)));
+
+    print("Decoded token payload: ${payloadMap['sub']}");
+    return payloadMap['sub'];
+  }
+}
+
+class EntryPoint extends StatefulWidget {
+  const EntryPoint({super.key});
+
+  @override
+  State<EntryPoint> createState() => _EntryPointState();
+}
+
+class _EntryPointState extends State<EntryPoint> {
+  @override
+  void initState() {
+    super.initState();
+    _checkRoleAndNavigate();
   }
 
-  final payload = base64Url.normalize(parts[1]);
-  final payloadMap = json.decode(utf8.decode(base64Url.decode(payload)));
+  Future<void> _checkRoleAndNavigate() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token') ?? '';
+    if (token.isEmpty) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+      );
+      return;
+    }
 
-  print("Decoded token payload: ${payloadMap['sub']}");
-  return payloadMap['sub'];
-  }}
+    final payload = decodeJwtPayload(token);
+    final isAdmin = payload['isadmin'] == 1;
+    final isSuper = payload['issuper'] == 1;
+    final isAssistant = payload['isassistant'] == 1;
+    final isClient = payload['isclient'] == 1;
+    final username = payload['username'] ?? 'Unknown';
+
+    if (isAdmin || isSuper) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const AdminPanelPage()),
+      );
+    } else if (isAssistant || isClient) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => ProfilePage(username: username)),
+      );
+    } else {
+      // fallback to login
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
+  }
+}

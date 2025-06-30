@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_typeahead/flutter_typeahead.dart'; // For TypeAheadFormField
 import 'package:shared_preferences/shared_preferences.dart'; // For SharedPreferences
+import 'app_drawer.dart';
 
 class AdminPanelPage extends StatefulWidget {
   const AdminPanelPage({Key? key}) : super(key: key);
@@ -31,21 +32,14 @@ class User {
       role = 'Commercial';
     }
 
-    return User(
-      username: json['username'] ?? '',
-      role: role,
-    );
+    return User(username: json['username'] ?? '', role: role);
   }
 }
 
 class _AdminPanelPageState extends State<AdminPanelPage> {
   int _selectedTabIndex = 0;
 
-  final List<String> _tabs = [
-    'Users',
-    'Clients',
-    'Products',
-  ];
+  final List<String> _tabs = ['Users', 'Clients', 'Products'];
 
   List<User> _users = [];
   bool _isLoadingUsers = false;
@@ -58,7 +52,9 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     });
 
     try {
-      final response = await http.get(Uri.parse('http://92.222.248.113:3000/api/v1/users'));
+      final response = await http.get(
+        Uri.parse('http://92.222.248.113:3000/api/v1/users'),
+      );
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         setState(() {
@@ -80,7 +76,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   }
 
   // Simulated current user role - Replace this with real data from API later
-  final String currentUserRole = 'admin'; // can be 'admin', 'superuser', 'assistant', 'delegue', 'client'
+  final String currentUserRole =
+      'admin'; // can be 'admin', 'superuser', 'assistant', 'delegue', 'client'
 
   bool get _canAddUser => ['admin', 'superuser'].contains(currentUserRole);
   bool get _canAddClient => ['admin', 'superuser'].contains(currentUserRole);
@@ -105,8 +102,9 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     });
 
     try {
-      final response =
-      await http.get(Uri.parse('http://92.222.248.113:3000/api/v1/clients'));
+      final response = await http.get(
+        Uri.parse('http://92.222.248.113:3000/api/v1/clients'),
+      );
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         setState(() {
@@ -130,9 +128,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Admin Panel'),
-      ),
+      appBar: AppBar(title: const Text('Admin Panel')),
       body: Padding(
         padding: const EdgeInsets.all(12.0),
         child: _buildTabContent(),
@@ -140,66 +136,16 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedTabIndex,
         onTap: (index) => setState(() => _selectedTabIndex = index),
-        items: _tabs.map((title) => BottomNavigationBarItem(
-          icon: const Icon(Icons.dashboard),
-          label: title,
-        )).toList(),
+        items: _tabs
+            .map(
+              (title) => BottomNavigationBarItem(
+                icon: const Icon(Icons.dashboard),
+                label: title,
+              ),
+            )
+            .toList(),
       ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: <Widget>[
-            const DrawerHeader(
-              decoration: BoxDecoration(color: Colors.blue),
-              child: Text('Menu', style: TextStyle(color: Colors.white, fontSize: 24)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.shopping_cart),
-              title: const Text('PO Interface'),
-              onTap: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => const PurchaseOrdersPage()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.bar_chart),
-              title: const Text('Sales Stats'),
-              onTap: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => const SalesStatsPage()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Settings'),
-              onTap: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => const AdminPanelPage()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.bolt_outlined),
-              title: const Text('CHAT BOT -Beta '),
-              onTap: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => const ChatBotPage()),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
+      drawer: const AppDrawer(), // <-- Use the shared drawer here
     );
   }
 
@@ -221,36 +167,42 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Manage Users', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const Text(
+          'Manage Users',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 10),
         if (_canAddUser)
           ElevatedButton(
-            onPressed: () => _showCreateUserDialog(context), // make sure this exists
+            onPressed: () =>
+                _showCreateUserDialog(context), // make sure this exists
             child: const Text('Add User'),
           ),
         const SizedBox(height: 10),
         if (_isLoadingUsers)
           const Center(child: CircularProgressIndicator())
         else if (_userError.isNotEmpty)
-          Center(child: Text(_userError, style: const TextStyle(color: Colors.red)))
+          Center(
+            child: Text(_userError, style: const TextStyle(color: Colors.red)),
+          )
         else if (_users.isEmpty)
-            const Center(child: Text('No users found'))
-          else
-            Expanded(
-              child: ListView.builder(
-                itemCount: _users.length,
-                itemBuilder: (context, index) {
-                  final user = _users[index];
-                  return Card(
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    child: ListTile(
-                      title: Text(user.username ?? ''),
-                      subtitle: Text('Role: ${user.role}'),
-                    ),
-                  );
-                },
-              ),
+          const Center(child: Text('No users found'))
+        else
+          Expanded(
+            child: ListView.builder(
+              itemCount: _users.length,
+              itemBuilder: (context, index) {
+                final user = _users[index];
+                return Card(
+                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  child: ListTile(
+                    title: Text(user.username ?? ''),
+                    subtitle: Text('Role: ${user.role}'),
+                  ),
+                );
+              },
             ),
+          ),
       ],
     );
   }
@@ -260,38 +212,97 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Manage Clients', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const Text(
+          'Manage Clients',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 10),
-        if (_canAddClient)
-          ElevatedButton(
-            onPressed: () => _showAddClientDialog(),
-            child: const Text('Add Client'),
-          ),
+
         const SizedBox(height: 10),
         if (_isLoadingClients)
           const Center(child: CircularProgressIndicator())
         else if (_clientError.isNotEmpty)
-          Center(child: Text(_clientError, style: const TextStyle(color: Colors.red)))
+          Center(
+            child: Text(
+              _clientError,
+              style: const TextStyle(color: Colors.red),
+            ),
+          )
         else if (_clients.isEmpty)
-            const Center(child: Text('No clients found'))
-          else
-            Expanded(
-              child: ListView.builder(
-                itemCount: _clients.length,
-                itemBuilder: (context, index) {
-                  final client = _clients[index];
-                  return Card(
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    child: ListTile(
-                      title: Text(client.clientName ?? ''),
-                      subtitle: Text('Wilaya: ${client.wilaya ?? ''}'),
-                      trailing: Text('ID: ${client.clientsID ?? ''}', style: const TextStyle(fontSize: 12)),
-                      dense: true,
+          const Center(child: Text('No clients found'))
+        else
+          Expanded(
+            child: ListView.builder(
+              itemCount: _clients.length,
+              itemBuilder: (context, index) {
+                final client = _clients[index];
+                return Card(
+                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  child: ListTile(
+                    title: Text(client.clientName ?? ''),
+                    subtitle: Text('Wilaya: ${client.wilaya ?? ''}'),
+                    trailing: Text(
+                      'ID: ${client.clientsID ?? ''}',
+                      style: const TextStyle(fontSize: 12),
                     ),
-                  );
-                },
+                    dense: true,
+                  ),
+                );
+              },
+            ),
+          ),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(Icons.add),
+                label: const Text('Add Client'),
+                onPressed: () => _showAddClientDialog(),
               ),
             ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(Icons.edit),
+                label: const Text('Edit Client'),
+                onPressed: () => _showEditClientDialog(context),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(Icons.delete),
+                label: const Text('Delete Client'),
+                onPressed: () => _showDeleteClientDialog(context),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
       ],
     );
   }
@@ -301,7 +312,10 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Manage Products', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const Text(
+          'Manage Products',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 10),
         if (_canAddProduct)
           ElevatedButton(
@@ -309,7 +323,9 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
             child: const Text('Add Product'),
           ),
         const SizedBox(height: 10),
-        const Expanded(child: Placeholder(child: Text('Product management goes here'))),
+        const Expanded(
+          child: Placeholder(child: Text('Product management goes here')),
+        ),
       ],
     );
   }
@@ -356,13 +372,14 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Failed: ${response.statusCode} - ${response.body}')),
+            content: Text('Failed: ${response.statusCode} - ${response.body}'),
+          ),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error creating user: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error creating user: $e')));
     }
   }
 
@@ -380,7 +397,10 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: Text('Create User', style: const TextStyle(fontWeight: FontWeight.bold)),
+              title: Text(
+                'Create User',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
               content: SingleChildScrollView(
                 child: Padding(
                   padding: const EdgeInsets.all(4.0),
@@ -408,7 +428,10 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                         alignment: Alignment.centerLeft,
                         child: Text(
                           'Select Role',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -468,14 +491,18 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                               ),
                               suggestionsCallback: (pattern) async {
                                 if (pattern.isEmpty) return [];
-                                final response = await http.get(Uri.parse(
-                                  'http://92.222.248.113:3000/api/v1/clients/search?term=$pattern',
-                                ));
+                                final response = await http.get(
+                                  Uri.parse(
+                                    'http://92.222.248.113:3000/api/v1/clients/search?term=$pattern',
+                                  ),
+                                );
                                 if (response.statusCode == 200) {
-                                  final List<dynamic> clientsJson = jsonDecode(response.body);
+                                  final List<dynamic> clientsJson = jsonDecode(
+                                    response.body,
+                                  );
                                   CreateClientsMap = {
                                     for (var client in clientsJson)
-                                      client['clientName']: client['clientsID']
+                                      client['clientName']: client['clientsID'],
                                   };
                                   return CreateClientsMap.keys.toList();
                                 } else {
@@ -488,7 +515,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                                 _extraInfoController.text = suggestion;
                                 selectedCrClientName = suggestion;
                               },
-                              validator: (value) => (value == null || value.trim().isEmpty)
+                              validator: (value) =>
+                                  (value == null || value.trim().isEmpty)
                                   ? 'Client is required'
                                   : null,
                             ),
@@ -505,7 +533,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                 ),
                 ElevatedButton(
                   onPressed: () async {
-                    if (_selectedRole == UserRole.user && (_extraInfoController.text.isEmpty)) {
+                    if (_selectedRole == UserRole.user &&
+                        (_extraInfoController.text.isEmpty)) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Please select a client')),
                       );
@@ -549,15 +578,32 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: _clientIdController, decoration: const InputDecoration(labelText: 'Client ID (e.g., C050)')),
-              TextField(controller: _clientNameController, decoration: const InputDecoration(labelText: 'Client Name')),
-              TextField(controller: _phoneController, decoration: const InputDecoration(labelText: 'Phone')),
-              TextField(controller: _wilayaController, decoration: const InputDecoration(labelText: 'Wilaya')),
+              TextField(
+                controller: _clientIdController,
+                decoration: const InputDecoration(
+                  labelText: 'Client ID (e.g., C050)',
+                ),
+              ),
+              TextField(
+                controller: _clientNameController,
+                decoration: const InputDecoration(labelText: 'Client Name'),
+              ),
+              TextField(
+                controller: _phoneController,
+                decoration: const InputDecoration(labelText: 'Phone'),
+              ),
+              TextField(
+                controller: _wilayaController,
+                decoration: const InputDecoration(labelText: 'Wilaya'),
+              ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: Navigator.of(context).pop, child: const Text('Cancel')),
+          TextButton(
+            onPressed: Navigator.of(context).pop,
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () async {
               final String clientId = _clientIdController.text.trim();
@@ -572,32 +618,42 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                 return;
               }
 
-              final url = Uri.parse('http://92.222.248.113:3000/api/v1/clients');
+              final url = Uri.parse(
+                'http://92.222.248.113:3000/api/v1/clients',
+              );
               final body = jsonEncode({
                 "clientsID": clientId,
                 "clientName": clientName,
                 "telephone": phone,
-                "wilaya": wilaya
+                "wilaya": wilaya,
               });
 
               try {
-                final response = await http.post(url, headers: {'Content-Type': 'application/json'}, body: body);
+                final response = await http.post(
+                  url,
+                  headers: {'Content-Type': 'application/json'},
+                  body: body,
+                );
 
                 if (response.statusCode == 201 || response.statusCode == 200) {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Client "$clientName" added successfully!')),
+                    SnackBar(
+                      content: Text('Client "$clientName" added successfully!'),
+                    ),
                   );
                   _fetchClients(); // Refresh list
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to add client: ${response.body}')),
+                    SnackBar(
+                      content: Text('Failed to add client: ${response.body}'),
+                    ),
                   );
                 }
               } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error: $e')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('Error: $e')));
               }
             },
             child: const Text('Add'),
@@ -607,11 +663,9 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     );
   }
 
-
-
-
   void _showAddProductDialog() {
-    final TextEditingController _productNameController = TextEditingController();
+    final TextEditingController _productNameController =
+        TextEditingController();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -621,19 +675,271 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           decoration: const InputDecoration(labelText: 'Product Name'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () {
-              print("API CALL: addProduct(name: ${_productNameController.text})");
+              print(
+                "API CALL: addProduct(name: ${_productNameController.text})",
+              );
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Product "${_productNameController.text}" added')),
+                SnackBar(
+                  content: Text(
+                    'Product "${_productNameController.text}" added',
+                  ),
+                ),
               );
             },
             child: const Text('Add'),
           ),
         ],
       ),
+    );
+  }
+
+  void _showEditClientDialog(BuildContext context) {
+    final TextEditingController _searchController = TextEditingController();
+    Client? selectedClient;
+    final TextEditingController _clientNameController = TextEditingController();
+    final TextEditingController _wilayaController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Edit Client'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TypeAheadFormField<Client>(
+                    textFieldConfiguration: TextFieldConfiguration(
+                      controller: _searchController,
+                      decoration: const InputDecoration(
+                        labelText: 'Search Client',
+                        prefixIcon: Icon(Icons.search),
+                      ),
+                    ),
+                    suggestionsCallback: (pattern) {
+                      return _clients.where(
+                        (client) => client.clientName!.toLowerCase().contains(
+                          pattern.toLowerCase(),
+                        ),
+                      );
+                    },
+                    itemBuilder: (context, Client suggestion) {
+                      return ListTile(
+                        title: Text(suggestion.clientName ?? ''),
+                        subtitle: Text('Wilaya: ${suggestion.wilaya ?? ''}'),
+                      );
+                    },
+                    onSuggestionSelected: (Client suggestion) {
+                      setState(() {
+                        selectedClient = suggestion;
+                        _searchController.text = suggestion.clientName ?? '';
+                        _clientNameController.text =
+                            suggestion.clientName ?? '';
+                        _wilayaController.text = suggestion.wilaya ?? '';
+                      });
+                    },
+                    noItemsFoundBuilder: (context) =>
+                        const ListTile(title: Text('No client found')),
+                  ),
+                  const SizedBox(height: 12),
+                  if (selectedClient != null) ...[
+                    TextField(
+                      controller: _clientNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Client Name',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _wilayaController,
+                      decoration: const InputDecoration(labelText: 'Wilaya'),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: selectedClient == null
+                      ? null
+                      : () async {
+                          // Call your API to update the client here
+                          final url = Uri.parse(
+                            'http://92.222.248.113:3000/api/v1/clients/${selectedClient!.clientsID}',
+                          );
+                          final body = jsonEncode({
+                            "clientName": _clientNameController.text.trim(),
+                            "wilaya": _wilayaController.text.trim(),
+                          });
+                          try {
+                            final response = await http.put(
+                              url,
+                              headers: {'Content-Type': 'application/json'},
+                              body: body,
+                            );
+                            if (response.statusCode == 200) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Client updated!'),
+                                ),
+                              );
+                              _fetchClients();
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed: ${response.body}'),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error: $e')),
+                            );
+                          }
+                        },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showDeleteClientDialog(BuildContext context) {
+    final TextEditingController _searchController = TextEditingController();
+    Client? selectedClient;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Delete Client'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TypeAheadFormField<Client>(
+                    textFieldConfiguration: TextFieldConfiguration(
+                      controller: _searchController,
+                      decoration: const InputDecoration(
+                        labelText: 'Search Client',
+                        prefixIcon: Icon(Icons.search),
+                      ),
+                    ),
+                    suggestionsCallback: (pattern) {
+                      return _clients.where(
+                        (client) => client.clientName!.toLowerCase().contains(
+                          pattern.toLowerCase(),
+                        ),
+                      );
+                    },
+                    itemBuilder: (context, Client suggestion) {
+                      return ListTile(
+                        title: Text(suggestion.clientName ?? ''),
+                        subtitle: Text('Wilaya: ${suggestion.wilaya ?? ''}'),
+                      );
+                    },
+                    onSuggestionSelected: (Client suggestion) {
+                      setState(() {
+                        selectedClient = suggestion;
+                        _searchController.text = suggestion.clientName ?? '';
+                      });
+                    },
+                    noItemsFoundBuilder: (context) =>
+                        const ListTile(title: Text('No client found')),
+                  ),
+                  const SizedBox(height: 12),
+                  if (selectedClient != null)
+                    Text(
+                      'Are you sure you want to delete "${selectedClient!.clientName}"?',
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  onPressed: selectedClient == null
+                      ? null
+                      : () async {
+                          // Confirm deletion
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Confirm Delete'),
+                              content: Text(
+                                'Delete "${selectedClient!.clientName}"?',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context, false),
+                                  child: const Text('No'),
+                                ),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red,
+                                  ),
+                                  onPressed: () => Navigator.pop(context, true),
+                                  child: const Text('Yes, Delete'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirmed == true) {
+                            final url = Uri.parse(
+                              'http://92.222.248.113:3000/api/v1/clients/${selectedClient!.clientsID}',
+                            );
+                            try {
+                              final response = await http.delete(url);
+                              if (response.statusCode == 200) {
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Client deleted!'),
+                                  ),
+                                );
+                                _fetchClients();
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Failed: ${response.body}'),
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e')),
+                              );
+                            }
+                          }
+                        },
+                  child: const Text('Delete'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

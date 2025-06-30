@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart';
+import 'app_drawer.dart';
 
 class ChatBotPage extends StatefulWidget {
   const ChatBotPage({Key? key}) : super(key: key);
@@ -107,6 +108,7 @@ class _ChatBotPageState extends State<ChatBotPage> {
       appBar: AppBar(
         title: const Text('Sales Assistant'),
       ),
+      drawer: const AppDrawer(), // <-- Add this line
       body: Column(
         children: [
           Expanded(

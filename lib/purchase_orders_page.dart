@@ -1,3 +1,5 @@
+import 'package:EstStarCommande/Chatbot.dart';
+import 'package:EstStarCommande/app_drawer.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:open_file/open_file.dart';
@@ -6,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'login_page.dart';
 import 'SalesStatsPage.dart';
+import 'package:EstStarCommande/profile_page.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_typeahead/flutter_typeahead.dart';
@@ -106,8 +109,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
             'client': item['client']['clientName'] ?? 'Unknown',
             'product': item['operator'] ?? 'Unknown',
             'quantity': item['amount'] ?? 0,
-            'prixPercent': double.tryParse(
-                (item['pourcentage'] ?? '0').replaceAll('%', '')) ??
+            'prixPercent':
+                double.tryParse(
+                  (item['pourcentage'] ?? '0').replaceAll('%', ''),
+                ) ??
                 0,
             'state': item['isValidated'] ?? 'En Attente',
             'name': item['user']['username'] ?? 'Unknown',
@@ -121,7 +126,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Failed to fetch orders: ${response.statusCode}')),
+          content: Text('Failed to fetch orders: ${response.statusCode}'),
+        ),
       );
     }
   }
@@ -174,7 +180,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       'FLEXY  EST',
       'FLEXY SUD',
       'FLEXY CENTRE',
-      'FLEXY '
+      'FLEXY ',
     ];
     setState(() {
       productCheckboxes = {for (var product in productList) product: true};
@@ -194,18 +200,22 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
   List<Map<String, dynamic>> get filteredOrders {
     final filtered = allOrders.where((order) {
-      final clientMatch = order['client']
-          .toLowerCase()
-          .contains(searchQuery.toLowerCase());
-      final stateMatch = selectedState == null || order['state'] == selectedState;
+      final clientMatch = order['client'].toLowerCase().contains(
+        searchQuery.toLowerCase(),
+      );
+      final stateMatch =
+          selectedState == null || order['state'] == selectedState;
       bool dateMatch = true;
       if (selectedDateRange != null) {
         try {
           final orderDate = DateTime.parse(order['date']);
-          dateMatch = orderDate.isAfter(selectedDateRange!.start.subtract(
-              const Duration(days: 1))) &&
+          dateMatch =
+              orderDate.isAfter(
+                selectedDateRange!.start.subtract(const Duration(days: 1)),
+              ) &&
               orderDate.isBefore(
-                  selectedDateRange!.end.add(const Duration(days: 1)));
+                selectedDateRange!.end.add(const Duration(days: 1)),
+              );
         } catch (_) {
           dateMatch = false;
         }
@@ -239,7 +249,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       'Number',
       'Accepted',
       'Accepted By',
-      'Date'
+      'Date',
     ];
     sheet.appendRow(headers);
     for (var item in data) {
@@ -260,9 +270,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     }
     final fileBytes = excel.save();
     if (fileBytes == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ Failed to save Excel')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('❌ Failed to save Excel')));
       return;
     }
     final dir = await getApplicationDocumentsDirectory();
@@ -271,9 +281,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       ..createSync(recursive: true)
       ..writeAsBytesSync(fileBytes);
     // Show success message and open the file
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('✅ Excel exported to: $path')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('✅ Excel exported to: $path')));
     // Open the file using the default app associated with .xlsx files
     OpenFile.open(path);
   }
@@ -293,13 +303,14 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       setState(() {
         allOrders.removeAt(index);
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Order deleted successfully')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Order deleted successfully')));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Failed to delete order: ${response.statusCode}')),
+          content: Text('Failed to delete order: ${response.statusCode}'),
+        ),
       );
     }
   }
@@ -313,7 +324,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         return AlertDialog(
           title: const Text('Confirm Deletion'),
           content: Text(
-              'Are you sure you want to delete the order for "$orderName"? This action cannot be undone.'),
+            'Are you sure you want to delete the order for "$orderName"? This action cannot be undone.',
+          ),
           actions: <Widget>[
             TextButton(
               child: const Text('Cancel'),
@@ -340,7 +352,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     final orderId = allOrders[index]['id'].toString();
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
-    final url = Uri.parse('http://92.222.248.113:3000/api/v1/commands/$orderId');
+    final url = Uri.parse(
+      'http://92.222.248.113:3000/api/v1/commands/$orderId',
+    );
     try {
       final response = await http.put(
         url,
@@ -360,27 +374,29 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Failed to update state: ${response.statusCode}')),
+            content: Text('Failed to update state: ${response.statusCode}'),
+          ),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
   Future<void> handleAccept(bool accepted, int id) async {
     final orderId = allOrders[id]['id'].toString();
     final url = Uri.parse(
-        'http://92.222.248.113:3000/api/v1/commands/accept/$orderId');
+      'http://92.222.248.113:3000/api/v1/commands/accept/$orderId',
+    );
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
     final response = await http.put(
       url,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token'
+        'Authorization': 'Bearer $token',
       },
       body: jsonEncode({'accepted': accepted}),
     );
@@ -391,23 +407,27 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Failed to update order: ${response.statusCode}')),
+          content: Text('Failed to update order: ${response.statusCode}'),
+        ),
       );
     }
   }
 
   void _showEditDialog(int index) {
     final order = allOrders[index];
-    final clientController =
-    TextEditingController(text: order['client'] ?? '');
-    final productController =
-    TextEditingController(text: order['product'] ?? '');
-    final quantityController =
-    TextEditingController(text: order['quantity'].toString());
-    final prixPercentController =
-    TextEditingController(text: order['prixPercent'].toString());
-    final numberController =
-    TextEditingController(text: order['number']?.toString() ?? '');
+    final clientController = TextEditingController(text: order['client'] ?? '');
+    final productController = TextEditingController(
+      text: order['product'] ?? '',
+    );
+    final quantityController = TextEditingController(
+      text: order['quantity'].toString(),
+    );
+    final prixPercentController = TextEditingController(
+      text: order['prixPercent'].toString(),
+    );
+    final numberController = TextEditingController(
+      text: order['number']?.toString() ?? '',
+    );
     final nameController = TextEditingController(text: order['name'] ?? '');
     final dateController = TextEditingController(text: order['date'] ?? '');
 
@@ -419,29 +439,36 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           child: Column(
             children: [
               TextField(
-                  controller: clientController,
-                  decoration: const InputDecoration(labelText: 'Client')),
+                controller: clientController,
+                decoration: const InputDecoration(labelText: 'Client'),
+              ),
               TextField(
-                  controller: productController,
-                  decoration: const InputDecoration(labelText: 'Product')),
+                controller: productController,
+                decoration: const InputDecoration(labelText: 'Product'),
+              ),
               TextField(
-                  controller: quantityController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Quantity')),
+                controller: quantityController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Quantity'),
+              ),
               TextField(
-                  controller: numberController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'number')),
+                controller: numberController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'number'),
+              ),
               TextField(
-                  controller: prixPercentController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Prix %')),
+                controller: prixPercentController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Prix %'),
+              ),
               TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(labelText: 'Name')),
+                controller: nameController,
+                decoration: const InputDecoration(labelText: 'Name'),
+              ),
               TextField(
-                  controller: dateController,
-                  decoration: const InputDecoration(labelText: 'Date')),
+                controller: dateController,
+                decoration: const InputDecoration(labelText: 'Date'),
+              ),
             ],
           ),
         ),
@@ -455,9 +482,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
               _updateOrder(index, {
                 'client': clientController.text,
                 'product': productController.text,
-                'quantity': int.tryParse(quantityController.text) ??
-                    order['quantity'],
-                'prixPercent': double.tryParse(prixPercentController.text) ??
+                'quantity':
+                    int.tryParse(quantityController.text) ?? order['quantity'],
+                'prixPercent':
+                    double.tryParse(prixPercentController.text) ??
                     order['prixPercent'],
                 'number': numberController.text,
                 'state': order['state'],
@@ -513,7 +541,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       'FLEXY  EST',
       'FLEXY SUD',
       'FLEXY CENTRE',
-      'FLEXY '
+      'FLEXY ',
     ];
 
     Widget buildMultiProductInput(BuildContext context) {
@@ -526,8 +554,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                   decoration: InputDecoration(labelText: 'Search Product'),
                 ),
                 suggestionsCallback: (pattern) => productList
-                    .where((p) =>
-                    p.toLowerCase().contains(pattern.toLowerCase()))
+                    .where(
+                      (p) => p.toLowerCase().contains(pattern.toLowerCase()),
+                    )
                     .toList(),
                 itemBuilder: (context, suggestion) =>
                     ListTile(title: Text(suggestion)),
@@ -569,7 +598,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                             selectedProducts.removeAt(index);
                           });
                         },
-                      )
+                      ),
                     ],
                   );
                 },
@@ -594,42 +623,48 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                 isclient
                     ? SizedBox()
                     : TypeAheadFormField<String>(
-                  textFieldConfiguration: TextFieldConfiguration(
-                    controller: clientController,
-                    decoration: const InputDecoration(
-                      labelText: 'Client',
-                      prefixIcon: Icon(Icons.person),
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.none, // Prevents keyboard
-                    enabled: true, // Makes the whole field non-interactive
-                  ),
-                  suggestionsCallback: (pattern) async {
-                    if (pattern.isEmpty) return [];
-                    final response = await http.get(Uri.parse(
-                      'http://92.222.248.113:3000/api/v1/clients/search?term=$pattern',
-                    ));
-                    if (response.statusCode == 200) {
-                      final List<dynamic> clientsJson = jsonDecode(response.body);
-                      clientsMap = {
-                        for (var client in clientsJson)
-                          client['clientName']: client['clientsID']
-                      };
-                      return clientsMap.keys.toList();
-                    } else {
-                      return [];
-                    }
-                  },
-                  itemBuilder: (context, String suggestion) =>
-                      ListTile(title: Text(suggestion)),
-                  onSuggestionSelected: (String suggestion) {
-                    clientController.text = suggestion;
-                    selectedClientName = suggestion;
-                  },
-                  validator: (value) => (value == null || value.trim().isEmpty )
-                      ? 'Client is required'
-                      : null,
-                ),
+                        textFieldConfiguration: TextFieldConfiguration(
+                          controller: clientController,
+                          decoration: const InputDecoration(
+                            labelText: 'Client',
+                            prefixIcon: Icon(Icons.person),
+                            border: OutlineInputBorder(),
+                          ),
+                          keyboardType: TextInputType.none, // Prevents keyboard
+                          enabled:
+                              true, // Makes the whole field non-interactive
+                        ),
+                        suggestionsCallback: (pattern) async {
+                          if (pattern.isEmpty) return [];
+                          final response = await http.get(
+                            Uri.parse(
+                              'http://92.222.248.113:3000/api/v1/clients/search?term=$pattern',
+                            ),
+                          );
+                          if (response.statusCode == 200) {
+                            final List<dynamic> clientsJson = jsonDecode(
+                              response.body,
+                            );
+                            clientsMap = {
+                              for (var client in clientsJson)
+                                client['clientName']: client['clientsID'],
+                            };
+                            return clientsMap.keys.toList();
+                          } else {
+                            return [];
+                          }
+                        },
+                        itemBuilder: (context, String suggestion) =>
+                            ListTile(title: Text(suggestion)),
+                        onSuggestionSelected: (String suggestion) {
+                          clientController.text = suggestion;
+                          selectedClientName = suggestion;
+                        },
+                        validator: (value) =>
+                            (value == null || value.trim().isEmpty)
+                            ? 'Client is required'
+                            : null,
+                      ),
                 const SizedBox(height: 16),
                 buildMultiProductInput(context),
                 const SizedBox(height: 16),
@@ -684,23 +719,23 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                     body: jsonEncode({
                       'operator': product,
                       'amount': quantity,
-                      'ClientsID':
-                      isclient ? payload['clid'] : clientId,
+                      'ClientsID': isclient ? payload['clid'] : clientId,
                       'isValidated': 'En Attente',
                       'pourcentage':
-                      '${double.tryParse(prixPercentController.text) ?? 0}%',
+                          '${double.tryParse(prixPercentController.text) ?? 0}%',
                       'number': numberController.text,
                     }),
                   );
 
-                  if (response.statusCode == 201 || response.statusCode == 200) {
+                  if (response.statusCode == 201 ||
+                      response.statusCode == 200) {
                     setState(() {
                       allOrders.add({
                         'client': clientController.text,
                         'product': product,
                         'quantity': quantity,
                         'prixPercent':
-                        double.tryParse(prixPercentController.text) ?? 0,
+                            double.tryParse(prixPercentController.text) ?? 0,
                         'state': 'En Attente',
                         'name': nameController.text,
                         'date': DateTime.now().toIso8601String(),
@@ -711,7 +746,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                      content: Text("${selectedProducts.length} Orders created successfully")),
+                    content: Text(
+                      "${selectedProducts.length} Orders created successfully",
+                    ),
+                  ),
                 );
                 Navigator.pop(context);
               }
@@ -762,7 +800,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Failed to update order: ${response.statusCode}')),
+          content: Text('Failed to update order: ${response.statusCode}'),
+        ),
       );
     }
   }
@@ -780,8 +819,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: Text('Create User',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
+              title: Text(
+                'Create User',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               content: SingleChildScrollView(
                 child: Padding(
                   padding: const EdgeInsets.all(4.0),
@@ -810,7 +851,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                         child: Text(
                           'Select Role',
                           style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w600),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                       SizedBox(height: 4),
@@ -868,15 +911,18 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                           ),
                           suggestionsCallback: (pattern) async {
                             if (pattern.isEmpty) return [];
-                            final response = await http.get(Uri.parse(
-                              'http://92.222.248.113:3000/api/v1/clients/search?term=$pattern',
-                            ));
+                            final response = await http.get(
+                              Uri.parse(
+                                'http://92.222.248.113:3000/api/v1/clients/search?term=$pattern',
+                              ),
+                            );
                             if (response.statusCode == 200) {
-                              final List<dynamic> clientsJson =
-                              jsonDecode(response.body);
+                              final List<dynamic> clientsJson = jsonDecode(
+                                response.body,
+                              );
                               CreateClientsMap = {
                                 for (var client in clientsJson)
-                                  client['clientName']: client['clientsID']
+                                  client['clientName']: client['clientsID'],
                               };
                               return CreateClientsMap.keys.toList();
                             } else {
@@ -889,8 +935,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                             _extraInfoController.text = suggestion;
                             selectedCrClientName = suggestion;
                           },
-                          validator: (value) => (value == null ||
-                              value.trim().isEmpty)
+                          validator: (value) =>
+                              (value == null || value.trim().isEmpty)
                               ? 'Client is required'
                               : null,
                         ),
@@ -961,21 +1007,19 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       );
       if (response.statusCode == 200 || response.statusCode == 201) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content:
-              Text('User "$username" created successfully!')),
+          SnackBar(content: Text('User "$username" created successfully!')),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(
-                  'Failed: ${response.statusCode} - ${response.body}')),
+            content: Text('Failed: ${response.statusCode} - ${response.body}'),
+          ),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -1004,20 +1048,19 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
   void _sendOrderToWhatsApp(Map<String, dynamic> order) async {
     String phoneNumber = "213770940827";
-    String message = "Nouvelle Commande:\n"
+    String message =
+        "Nouvelle Commande:\n"
         "Client: ${order['client']}\n"
         "Product: ${order['product']}\n"
         "Quantity: ${order['quantity']}\n"
         "Number: ${order['number']}";
     String urlEncodedMessage = Uri.encodeComponent(message);
-    String whatsappUrl =
-        "http://wa.me/$phoneNumber/?text=$urlEncodedMessage";
+    String whatsappUrl = "http://wa.me/$phoneNumber/?text=$urlEncodedMessage";
     if (await canLaunch(whatsappUrl)) {
       await launch(whatsappUrl);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('Could not launch WhatsApp. Is it installed?')),
+        SnackBar(content: Text('Could not launch WhatsApp. Is it installed?')),
       );
     }
   }
@@ -1027,7 +1070,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
   List get paginatedOrders {
     final startIndex = _currentPage * _rowsPerPage;
-    final endIndex = (startIndex + _rowsPerPage).clamp(0, filteredOrders.length);
+    final endIndex = (startIndex + _rowsPerPage).clamp(
+      0,
+      filteredOrders.length,
+    );
     return filteredOrders.sublist(startIndex, endIndex);
   }
 
@@ -1056,14 +1102,6 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     );
   }
 
-
-
-
-
-
-
-
-
   @override
   void dispose() {
     _refreshTimer?.cancel();
@@ -1091,364 +1129,345 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
             tooltip: 'Logout',
             onPressed: () async {
               final prefs = await SharedPreferences.getInstance();
-              await prefs.remove('auth_token');
+              await prefs.remove('auth_token'); // <-- This removes the token
               Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(
-                    builder: (context) => const LoginPage()),
+                MaterialPageRoute(builder: (_) => const LoginPage()),
               );
             },
           ),
         ],
       ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: <Widget>[
-            const DrawerHeader(
-              decoration: BoxDecoration(
-                color: Colors.blue,
-              ),
-              child: Text(
-                'Menu',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.shopping_cart),
-              title: const Text('PO Interface'),
-              onTap: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => const PurchaseOrdersPage()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.bar_chart),
-              title: const Text('Sales Stats'),
-              onTap: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => const SalesStatsPage()),
-                );
-
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Settings'),
-              onTap: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => const AdminPanelPage()),
-                );
-
-              },
-            ),
-          ],
-        ),
-      ),
+      drawer: const AppDrawer(), // <-- Use the new shared drawer here
       body: Column(
         children: [
-          LayoutBuilder(builder: (context, constraints) {
-            if (constraints.maxWidth > 1400) {
-              return Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    SizedBox(
-                      width: 200,
-                      child: TextField(
-                        decoration: const InputDecoration(
-                          labelText: 'Search by client',
-                          border: OutlineInputBorder(),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth > 1400) {
+                return Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      SizedBox(
+                        width: 200,
+                        child: TextField(
+                          decoration: const InputDecoration(
+                            labelText: 'Search by client',
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (val) => setState(() => searchQuery = val),
                         ),
-                        onChanged: (val) =>
-                            setState(() => searchQuery = val),
                       ),
-                    ),
-                    Image.asset(
-                      'assets/images/my_logo.png',
-                      fit: BoxFit.contain,
-                      width: 50,
-                      height: 50,
-                    ),
+                      Image.asset(
+                        'assets/images/my_logo.png',
+                        fit: BoxFit.contain,
+                        width: 50,
+                        height: 50,
+                      ),
 
-                    buildProductFilter(),
-                    const SizedBox(width: 8),
-                    DropdownButton<String>(
-                      value: selectedState,
-                      hint: const Text("Filter by State"),
-                      items: [
-                        'En Attente',
-                        'Effectué',
-                        'Rejeté',
-                        'Numéro Incorrecte',
-                        'Problème Solde'
-                      ].map((state) => DropdownMenuItem(
-                          value: state, child: Text(state))).toList(),
-                      onChanged: (value) =>
-                          setState(() => selectedState = value),
-                    ),
-                    const SizedBox(width: 8),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      alignment: WrapAlignment.start,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            final picked = await showDateRangePicker(
-                              context: context,
-                              firstDate: DateTime(2020),
-                              lastDate: DateTime(2100),
-                            );
-                            if (picked != null) {
-                              setState(() => selectedDateRange = picked);
-                            }
-                          },
-                          icon: Icon(Icons.date_range),
-                          label: Text('Date Filter'),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 14),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: _showAddOrderDialog,
-                          icon: Icon(Icons.add),
-                          label: Text('Add PO'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 14),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              searchQuery = '';
-                              selectedDateRange = null;
-                              selectedState = null;
-                            });
-                          },
-                          icon: Icon(Icons.refresh),
-                          label: Text('Reset Filters'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 14),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: () => exportToExcel(allOrders),
-                          icon: Icon(Icons.download),
-                          label: Text('Export CSV'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blueGrey,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 14),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                        isAdminn || isSuserr
-                            ? ElevatedButton.icon(
-                          icon: Icon(Icons.person_add),
-                          label: Text('Create User'),
-                          onPressed: () => _showCreateUserDialog(context),
-                        )
-                            : SizedBox(),
-                      ],
-                    )
-                  ],
-                ),
-              );
-            } else {
-              return Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Image.asset(
-                          'assets/images/my_logo.png',
-                          fit: BoxFit.contain,
-                          width: 100,
-                          height: 100,
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _isMobileMenuOpen = !_isMobileMenuOpen;
-                            });
-                          },
-                          child: Container(
-                            padding: EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.blueGrey,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              _isMobileMenuOpen
-                                  ? Icons.close
-                                  : Icons.filter_list,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(
-                      width: 200,
-                      child: TextField(
-                        decoration: const InputDecoration(
-                          labelText: 'Search by client',
-                          border: OutlineInputBorder(),
-                        ),
-                        onChanged: (val) =>
-                            setState(() => searchQuery = val),
-                      ),
-                    ),
-                    AnimatedCrossFade(
-                      firstChild: Container(height: 0),
-                      secondChild: Column(
-                        children: [
-                          Row(
-                            children: [
-                              buildProductFilter(),
-                              DropdownButton<String>(
-                                value: selectedState,
-                                hint: const Text("Filter by State"),
-                                items: [
+                      buildProductFilter(),
+                      const SizedBox(width: 8),
+                      DropdownButton<String>(
+                        value: selectedState,
+                        hint: const Text("Filter by State"),
+                        items:
+                            [
                                   'En Attente',
                                   'Effectué',
                                   'Rejeté',
                                   'Numéro Incorrecte',
-                                  'Problème Solde'
-                                ].map((state) => DropdownMenuItem(
-                                    value: state, child: Text(state)))
-                                    .toList(),
-                                onChanged: (value) =>
-                                    setState(() => selectedState = value),
+                                  'Problème Solde',
+                                ]
+                                .map(
+                                  (state) => DropdownMenuItem(
+                                    value: state,
+                                    child: Text(state),
+                                  ),
+                                )
+                                .toList(),
+                        onChanged: (value) =>
+                            setState(() => selectedState = value),
+                      ),
+                      const SizedBox(width: 8),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        alignment: WrapAlignment.start,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              final picked = await showDateRangePicker(
+                                context: context,
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime(2100),
+                              );
+                              if (picked != null) {
+                                setState(() => selectedDateRange = picked);
+                              }
+                            },
+                            icon: Icon(Icons.date_range),
+                            label: Text('Date Filter'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 14,
                               ),
-                            ],
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
                           ),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            alignment: WrapAlignment.start,
-                            children: [
-                              ElevatedButton.icon(
-                                onPressed: () async {
-                                  final picked = await showDateRangePicker(
-                                    context: context,
-                                    firstDate: DateTime(2020),
-                                    lastDate: DateTime(2100),
-                                  );
-                                  if (picked != null) {
-                                    setState(
-                                            () => selectedDateRange = picked);
-                                  }
-                                },
-                                icon: Icon(Icons.date_range),
-                                label: Text('Date Filter'),
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 20, vertical: 14),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius:
-                                      BorderRadius.circular(12)),
-                                ),
+                          ElevatedButton.icon(
+                            onPressed: _showAddOrderDialog,
+                            icon: Icon(Icons.add),
+                            label: Text('Add PO'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 14,
                               ),
-                              ElevatedButton.icon(
-                                onPressed: _showAddOrderDialog,
-                                icon: Icon(Icons.add),
-                                label: Text('Ajouter Commande'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 20, vertical: 14),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius:
-                                      BorderRadius.circular(12)),
-                                ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              ElevatedButton.icon(
-                                onPressed: () {
-                                  setState(() {
-                                    searchQuery = '';
-                                    selectedDateRange = null;
-                                    selectedState = null;
-                                  });
-                                },
-                                icon: Icon(Icons.refresh),
-                                label: Text('Reset Filters'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.orange,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 20, vertical: 14),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius:
-                                      BorderRadius.circular(12)),
-                                ),
+                            ),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                searchQuery = '';
+                                selectedDateRange = null;
+                                selectedState = null;
+                              });
+                            },
+                            icon: Icon(Icons.refresh),
+                            label: Text('Reset Filters'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 14,
                               ),
-                              ElevatedButton.icon(
-                                onPressed: () => exportToExcel(allOrders),
-                                icon: Icon(Icons.download),
-                                label: Text('Export CSV'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blueGrey,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 20, vertical: 14),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius:
-                                      BorderRadius.circular(12)),
-                                ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              isAdminn || isSuserr
-                                  ? ElevatedButton.icon(
-                                icon: Icon(Icons.person_add),
-                                label: Text('Create User'),
-                                onPressed: () =>
-                                    _showCreateUserDialog(context),
-                              )
-                                  : SizedBox(),
-                            ],
+                            ),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: () => exportToExcel(allOrders),
+                            icon: Icon(Icons.download),
+                            label: Text('Export CSV'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blueGrey,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 14,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          isAdminn || isSuserr
+                              ? ElevatedButton.icon(
+                                  icon: Icon(Icons.person_add),
+                                  label: Text('Create User'),
+                                  onPressed: () =>
+                                      _showCreateUserDialog(context),
+                                )
+                              : SizedBox(),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              } else {
+                return Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Image.asset(
+                            'assets/images/my_logo.png',
+                            fit: BoxFit.contain,
+                            width: 100,
+                            height: 100,
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _isMobileMenuOpen = !_isMobileMenuOpen;
+                              });
+                            },
+                            child: Container(
+                              padding: EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.blueGrey,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                _isMobileMenuOpen
+                                    ? Icons.close
+                                    : Icons.filter_list,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                      crossFadeState: _isMobileMenuOpen
-                          ? CrossFadeState.showSecond
-                          : CrossFadeState.showFirst,
-                      duration: const Duration(milliseconds: 300),
-                    ),
-                  ],
-                ),
-              );
-            }
-          }),
+                      SizedBox(
+                        width: 200,
+                        child: TextField(
+                          decoration: const InputDecoration(
+                            labelText: 'Search by client',
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (val) => setState(() => searchQuery = val),
+                        ),
+                      ),
+                      AnimatedCrossFade(
+                        firstChild: Container(height: 0),
+                        secondChild: Column(
+                          children: [
+                            Row(
+                              children: [
+                                buildProductFilter(),
+                                DropdownButton<String>(
+                                  value: selectedState,
+                                  hint: const Text("Filter by State"),
+                                  items:
+                                      [
+                                            'En Attente',
+                                            'Effectué',
+                                            'Rejeté',
+                                            'Numéro Incorrecte',
+                                            'Problème Solde',
+                                          ]
+                                          .map(
+                                            (state) => DropdownMenuItem(
+                                              value: state,
+                                              child: Text(state),
+                                            ),
+                                          )
+                                          .toList(),
+                                  onChanged: (value) =>
+                                      setState(() => selectedState = value),
+                                ),
+                              ],
+                            ),
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              alignment: WrapAlignment.start,
+                              children: [
+                                ElevatedButton.icon(
+                                  onPressed: () async {
+                                    final picked = await showDateRangePicker(
+                                      context: context,
+                                      firstDate: DateTime(2020),
+                                      lastDate: DateTime(2100),
+                                    );
+                                    if (picked != null) {
+                                      setState(
+                                        () => selectedDateRange = picked,
+                                      );
+                                    }
+                                  },
+                                  icon: Icon(Icons.date_range),
+                                  label: Text('Date Filter'),
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 14,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                                ElevatedButton.icon(
+                                  onPressed: _showAddOrderDialog,
+                                  icon: Icon(Icons.add),
+                                  label: Text('Ajouter Commande'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 14,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                                ElevatedButton.icon(
+                                  onPressed: () {
+                                    setState(() {
+                                      searchQuery = '';
+                                      selectedDateRange = null;
+                                      selectedState = null;
+                                    });
+                                  },
+                                  icon: Icon(Icons.refresh),
+                                  label: Text('Reset Filters'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.orange,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 14,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                                ElevatedButton.icon(
+                                  onPressed: () => exportToExcel(allOrders),
+                                  icon: Icon(Icons.download),
+                                  label: Text('Export CSV'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blueGrey,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 14,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                                isAdminn || isSuserr
+                                    ? ElevatedButton.icon(
+                                        icon: Icon(Icons.person_add),
+                                        label: Text('Create User'),
+                                        onPressed: () =>
+                                            _showCreateUserDialog(context),
+                                      )
+                                    : SizedBox(),
+                              ],
+                            ),
+                          ],
+                        ),
+                        crossFadeState: _isMobileMenuOpen
+                            ? CrossFadeState.showSecond
+                            : CrossFadeState.showFirst,
+                        duration: const Duration(milliseconds: 300),
+                      ),
+                    ],
+                  ),
+                );
+              }
+            },
+          ),
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -1461,7 +1480,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                           itemBuilder: (context, index) {
                             final order = paginatedOrders[index];
                             final realIndex = allOrders.indexOf(order);
-                            final price = 10000 - (order['prixPercent'] / 100 * 10000);
+                            final price =
+                                10000 - (order['prixPercent'] / 100 * 10000);
 
                             return Card(
                               margin: const EdgeInsets.all(8),
@@ -1474,106 +1494,198 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('Client: ${order['client']}',
-                                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    Text(
+                                      'Client: ${order['client']}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                     Text('Produit: ${order['product']}'),
                                     Text('Quantité: ${order['quantity']}'),
-                                    Text('Pourcentage %: ${order['prixPercent']}%'),
+                                    Text(
+                                      'Pourcentage %: ${order['prixPercent']}%',
+                                    ),
                                     Text('Prix: ${price.toStringAsFixed(2)}'),
                                     Row(
                                       children: <Widget>[
                                         const Text('Numero Telephone: '),
                                         Expanded(
-                                          child: Text(order['number']?.toString() ?? ''),
+                                          child: Text(
+                                            order['number']?.toString() ?? '',
+                                          ),
                                         ),
                                         IconButton(
-                                          icon: const Icon(Icons.copy, size: 18),
+                                          icon: const Icon(
+                                            Icons.copy,
+                                            size: 18,
+                                          ),
                                           padding: EdgeInsets.zero,
                                           constraints: const BoxConstraints(),
                                           tooltip: 'Copy number',
                                           onPressed: () {
-                                            final numberToCopy = order['number']?.toString() ?? '';
+                                            final numberToCopy =
+                                                order['number']?.toString() ??
+                                                '';
                                             if (numberToCopy.isNotEmpty) {
-                                              Clipboard.setData(ClipboardData(text: numberToCopy));
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                SnackBar(content: Text('Numéro "$numberToCopy" copié!')),
+                                              Clipboard.setData(
+                                                ClipboardData(
+                                                  text: numberToCopy,
+                                                ),
+                                              );
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    'Numéro "$numberToCopy" copié!',
+                                                  ),
+                                                ),
                                               );
                                             } else {
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                const SnackBar(content: Text('Rien à copié!.')),
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Rien à copié!.',
+                                                  ),
+                                                ),
                                               );
                                             }
                                           },
                                         ),
                                       ],
                                     ),
-                                    Text('Etat Commande: ${order['state']}',
-                                        style: TextStyle(color: _stateColor(order['state']))),
+                                    Text(
+                                      'Etat Commande: ${order['state']}',
+                                      style: TextStyle(
+                                        color: _stateColor(order['state']),
+                                      ),
+                                    ),
                                     Text('Crée Par: ${order['name']}'),
                                     Text(
                                       'Etat Val: ${order['accepted'] ?? false ? "Valide" : "Non Valide"}',
                                       style: TextStyle(
-                                        color: (order['accepted'] ?? false) ? Colors.green : Colors.red,
+                                        color: (order['accepted'] ?? false)
+                                            ? Colors.green
+                                            : Colors.red,
                                       ),
                                     ),
 
-                                    Text('Accépté: ${order['acceptedBy']}' ),
-                                    Text('Date: ${DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.parse(order['date']))}'),
+                                    Text('Accépté: ${order['acceptedBy']}'),
+                                    Text(
+                                      'Date: ${DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.parse(order['date']))}',
+                                    ),
                                     const SizedBox(height: 8),
                                     if (isAdminn)
                                       Wrap(
                                         alignment: WrapAlignment.end,
                                         children: [
                                           IconButton(
-                                            icon: const Icon(Icons.check, color: Colors.green),
-                                            onPressed: () => _changeOrderState(realIndex, 'Effectué'),
+                                            icon: const Icon(
+                                              Icons.check,
+                                              color: Colors.green,
+                                            ),
+                                            onPressed: () => _changeOrderState(
+                                              realIndex,
+                                              'Effectué',
+                                            ),
                                           ),
                                           IconButton(
-                                            icon: const Icon(Icons.close, color: Colors.red),
-                                            onPressed: () => _changeOrderState(realIndex, 'Rejeté'),
+                                            icon: const Icon(
+                                              Icons.close,
+                                              color: Colors.red,
+                                            ),
+                                            onPressed: () => _changeOrderState(
+                                              realIndex,
+                                              'Rejeté',
+                                            ),
                                           ),
                                           IconButton(
-                                            icon: const Icon(Icons.phone_disabled, color: Colors.red),
-                                            onPressed: () => _changeOrderState(realIndex, 'Numéro Incorrecte'),
+                                            icon: const Icon(
+                                              Icons.phone_disabled,
+                                              color: Colors.red,
+                                            ),
+                                            onPressed: () => _changeOrderState(
+                                              realIndex,
+                                              'Numéro Incorrecte',
+                                            ),
                                           ),
                                           IconButton(
-                                            icon: const Icon(Icons.money_off_csred, color: Colors.red),
-                                            onPressed: () => _changeOrderState(realIndex, 'Probléme Solde'),
+                                            icon: const Icon(
+                                              Icons.money_off_csred,
+                                              color: Colors.red,
+                                            ),
+                                            onPressed: () => _changeOrderState(
+                                              realIndex,
+                                              'Probléme Solde',
+                                            ),
                                           ),
                                           IconButton(
-                                            icon: const Icon(Icons.hourglass_bottom, color: Colors.orange),
-                                            onPressed: () => _changeOrderState(realIndex, 'En Attente'),
+                                            icon: const Icon(
+                                              Icons.hourglass_bottom,
+                                              color: Colors.orange,
+                                            ),
+                                            onPressed: () => _changeOrderState(
+                                              realIndex,
+                                              'En Attente',
+                                            ),
                                           ),
                                           IconButton(
-                                            icon: const Icon(Icons.edit, color: Colors.blue),
-                                            onPressed: () => _showEditDialog(realIndex),
+                                            icon: const Icon(
+                                              Icons.edit,
+                                              color: Colors.blue,
+                                            ),
+                                            onPressed: () =>
+                                                _showEditDialog(realIndex),
                                           ),
                                           if (order['product'] == 'STORM STI')
                                             IconButton(
-                                              icon: const Icon(FontAwesomeIcons.whatsapp, color: Colors.green),
-                                              onPressed: () => _sendOrderToWhatsApp(order),
+                                              icon: const Icon(
+                                                FontAwesomeIcons.whatsapp,
+                                                color: Colors.green,
+                                              ),
+                                              onPressed: () =>
+                                                  _sendOrderToWhatsApp(order),
                                             ),
                                           IconButton(
-                                            icon: const Icon(Icons.delete, color: Colors.black),
-                                            onPressed: () => _confirmDeleteOrder(realIndex),
+                                            icon: const Icon(
+                                              Icons.delete,
+                                              color: Colors.black,
+                                            ),
+                                            onPressed: () =>
+                                                _confirmDeleteOrder(realIndex),
                                           ),
                                         ],
                                       ),
                                     if (isSuserr)
                                       Row(
-                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.end,
                                         children: [
                                           IconButton(
-                                            icon: const Icon(Icons.check, color: Colors.green),
-                                            onPressed: () => handleAccept(true, realIndex),
+                                            icon: const Icon(
+                                              Icons.check,
+                                              color: Colors.green,
+                                            ),
+                                            onPressed: () =>
+                                                handleAccept(true, realIndex),
                                           ),
                                           IconButton(
-                                            icon: const Icon(Icons.close, color: Colors.red),
-                                            onPressed: () => handleAccept(false, realIndex),
+                                            icon: const Icon(
+                                              Icons.close,
+                                              color: Colors.red,
+                                            ),
+                                            onPressed: () =>
+                                                handleAccept(false, realIndex),
                                           ),
                                           IconButton(
-                                            icon: const Icon(Icons.edit, color: Colors.blue),
-                                            onPressed: () => _showEditDialog(realIndex),
+                                            icon: const Icon(
+                                              Icons.edit,
+                                              color: Colors.blue,
+                                            ),
+                                            onPressed: () =>
+                                                _showEditDialog(realIndex),
                                           ),
                                         ],
                                       ),
@@ -1610,80 +1722,232 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                               if (isAdminn || isSuserr)
                                 const DataColumn(label: Text('Actions')),
                             ],
-                            rows: List.generate(paginatedOrders.length, (index) {
+                            rows: List.generate(paginatedOrders.length, (
+                              index,
+                            ) {
                               final order = paginatedOrders[index];
                               final realIndex = allOrders.indexOf(order);
-                              final calcPrice = 10000 - (order['prixPercent'] / 100 * 10000);
+                              final calcPrice =
+                                  10000 - (order['prixPercent'] / 100 * 10000);
 
-                              return DataRow(cells: [
-                                DataCell(Text(order['client'] ?? '')),
-                                DataCell(Text(order['product'])),
-                                DataCell(Text('${order['quantity']}')),
-                                DataCell(Text('${order['prixPercent']}%')),
-                                DataCell(Text(calcPrice.toStringAsFixed(2))),
-                                DataCell(Row(
-                                  children: [
-                                    Expanded(child: Text(order['number'] ?? '')),
-                                    IconButton(
-                                      icon: const Icon(Icons.copy, size: 18),
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
-                                      onPressed: () {
-                                        final numberToCopy = order['number']?.toString() ?? '';
-                                        if (numberToCopy.isNotEmpty) {
-                                          Clipboard.setData(ClipboardData(text: numberToCopy));
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text('Number "$numberToCopy" copied!')),
-                                          );
-                                        } else {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(content: Text('Nothing to copy.')),
-                                          );
-                                        }
-                                      },
-                                    )
-                                  ],
-                                )),
-                                DataCell(Text(order['state'],
-                                    style: TextStyle(color: _stateColor(order['state'])))),
-                                DataCell(Text(order['name'])),
-                                DataCell((order['accepted'] ?? false)
-                                    ? const Text("Valide", style: TextStyle(color: Colors.green))
-                                    : const Text("Non Valide", style: TextStyle(color: Colors.red))),
-                                DataCell(Text(order['acceptedBy'] ?? " ")),
-                                DataCell(Text(DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.parse(order['date'])))),
-                                if (isAdminn)
-                                  DataCell(SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: Row(
+                              return DataRow(
+                                cells: [
+                                  DataCell(Text(order['client'] ?? '')),
+                                  DataCell(Text(order['product'])),
+                                  DataCell(Text('${order['quantity']}')),
+                                  DataCell(Text('${order['prixPercent']}%')),
+                                  DataCell(Text(calcPrice.toStringAsFixed(2))),
+                                  DataCell(
+                                    Row(
                                       children: [
-                                        IconButton(icon: const Icon(Icons.check, color: Colors.green), onPressed: () => _changeOrderState(realIndex, 'Effectué')),
-                                        const SizedBox(width: 6),
-                                        IconButton(icon: const Icon(Icons.close, color: Colors.red), onPressed: () => _changeOrderState(realIndex, 'Rejeté')),
-                                        const SizedBox(width: 6),
-                                        IconButton(icon: const Icon(Icons.phone_disabled, color: Colors.red), onPressed: () => _changeOrderState(realIndex, 'Numéro Incorrecte')),
-                                        const SizedBox(width: 6),
-                                        IconButton(icon: const Icon(Icons.money_off_csred, color: Colors.red), onPressed: () => _changeOrderState(realIndex, 'Probléme Solde')),
-                                        const SizedBox(width: 6),
-                                        IconButton(icon: const Icon(Icons.hourglass_bottom, color: Colors.orange), onPressed: () => _changeOrderState(realIndex, 'En Attente')),
-                                        const SizedBox(width: 6),
-                                        IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _showEditDialog(realIndex)),
-                                        if (order['product'] == 'STORM STI' || order['product'] == 'FLEXY')
-                                          IconButton(icon: const Icon(FontAwesomeIcons.whatsapp, color: Colors.green), onPressed: () => _sendOrderToWhatsApp(order)),
-                                        const SizedBox(width: 6),
-                                        IconButton(icon: const Icon(Icons.delete, color: Colors.black), onPressed: () => _confirmDeleteOrder(realIndex)),
+                                        Expanded(
+                                          child: Text(order['number'] ?? ''),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.copy,
+                                            size: 18,
+                                          ),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          onPressed: () {
+                                            final numberToCopy =
+                                                order['number']?.toString() ??
+                                                '';
+                                            if (numberToCopy.isNotEmpty) {
+                                              Clipboard.setData(
+                                                ClipboardData(
+                                                  text: numberToCopy,
+                                                ),
+                                              );
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    'Number "$numberToCopy" copied!',
+                                                  ),
+                                                ),
+                                              );
+                                            } else {
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Nothing to copy.',
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                          },
+                                        ),
                                       ],
                                     ),
-                                  )),
-                                if (isSuserr)
-                                  DataCell(Row(
-                                    children: [
-                                      IconButton(icon: const Icon(Icons.check, color: Colors.green), onPressed: () => handleAccept(true, realIndex)),
-                                      IconButton(icon: const Icon(Icons.close, color: Colors.red), onPressed: () => handleAccept(false, realIndex)),
-                                      IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _showEditDialog(realIndex)),
-                                    ],
-                                  )),
-                              ]);
+                                  ),
+                                  DataCell(
+                                    Text(
+                                      order['state'],
+                                      style: TextStyle(
+                                        color: _stateColor(order['state']),
+                                      ),
+                                    ),
+                                  ),
+                                  DataCell(Text(order['name'])),
+                                  DataCell(
+                                    (order['accepted'] ?? false)
+                                        ? const Text(
+                                            "Valide",
+                                            style: TextStyle(
+                                              color: Colors.green,
+                                            ),
+                                          )
+                                        : const Text(
+                                            "Non Valide",
+                                            style: TextStyle(color: Colors.red),
+                                          ),
+                                  ),
+                                  DataCell(Text(order['acceptedBy'] ?? " ")),
+                                  DataCell(
+                                    Text(
+                                      DateFormat(
+                                        'dd/MM/yyyy HH:mm:ss',
+                                      ).format(DateTime.parse(order['date'])),
+                                    ),
+                                  ),
+                                  if (isAdminn)
+                                    DataCell(
+                                      SingleChildScrollView(
+                                        scrollDirection: Axis.horizontal,
+                                        child: Row(
+                                          children: [
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.check,
+                                                color: Colors.green,
+                                              ),
+                                              onPressed: () =>
+                                                  _changeOrderState(
+                                                    realIndex,
+                                                    'Effectué',
+                                                  ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.close,
+                                                color: Colors.red,
+                                              ),
+                                              onPressed: () =>
+                                                  _changeOrderState(
+                                                    realIndex,
+                                                    'Rejeté',
+                                                  ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.phone_disabled,
+                                                color: Colors.red,
+                                              ),
+                                              onPressed: () =>
+                                                  _changeOrderState(
+                                                    realIndex,
+                                                    'Numéro Incorrecte',
+                                                  ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.money_off_csred,
+                                                color: Colors.red,
+                                              ),
+                                              onPressed: () =>
+                                                  _changeOrderState(
+                                                    realIndex,
+                                                    'Probléme Solde',
+                                                  ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.hourglass_bottom,
+                                                color: Colors.orange,
+                                              ),
+                                              onPressed: () =>
+                                                  _changeOrderState(
+                                                    realIndex,
+                                                    'En Attente',
+                                                  ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.edit,
+                                                color: Colors.blue,
+                                              ),
+                                              onPressed: () =>
+                                                  _showEditDialog(realIndex),
+                                            ),
+                                            if (order['product'] ==
+                                                    'STORM STI' ||
+                                                order['product'] == 'FLEXY')
+                                              IconButton(
+                                                icon: const Icon(
+                                                  FontAwesomeIcons.whatsapp,
+                                                  color: Colors.green,
+                                                ),
+                                                onPressed: () =>
+                                                    _sendOrderToWhatsApp(order),
+                                              ),
+                                            const SizedBox(width: 6),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.delete,
+                                                color: Colors.black,
+                                              ),
+                                              onPressed: () =>
+                                                  _confirmDeleteOrder(
+                                                    realIndex,
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  if (isSuserr)
+                                    DataCell(
+                                      Row(
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.check,
+                                              color: Colors.green,
+                                            ),
+                                            onPressed: () =>
+                                                handleAccept(true, realIndex),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.close,
+                                              color: Colors.red,
+                                            ),
+                                            onPressed: () =>
+                                                handleAccept(false, realIndex),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.edit,
+                                              color: Colors.blue,
+                                            ),
+                                            onPressed: () =>
+                                                _showEditDialog(realIndex),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              );
                             }),
                           ),
                         ),
@@ -1694,8 +1958,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                 }
               },
             ),
-          )
-
+          ),
         ],
       ),
     );
@@ -1704,9 +1967,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   Widget buildProductFilter() {
     return Container(
       padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1716,23 +1977,28 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
               showDialog(
                 context: context,
                 builder: (context) {
-                  TextEditingController searchController = TextEditingController();
-                  List<String> filteredProducts = productCheckboxes.keys.toList();
+                  TextEditingController searchController =
+                      TextEditingController();
+                  List<String> filteredProducts = productCheckboxes.keys
+                      .toList();
                   return StatefulBuilder(
                     builder: (context, setStateDialog) {
                       void filterSearch(String query) {
                         setStateDialog(() {
                           filteredProducts = productCheckboxes.keys
-                              .where((product) => product
-                              .toLowerCase()
-                              .contains(query.toLowerCase()))
+                              .where(
+                                (product) => product.toLowerCase().contains(
+                                  query.toLowerCase(),
+                                ),
+                              )
                               .toList();
                         });
                       }
 
                       return Dialog(
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         child: Container(
                           width: 400,
                           height: 500,
@@ -1757,7 +2023,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   contentPadding: EdgeInsets.symmetric(
-                                      vertical: 0, horizontal: 12),
+                                    vertical: 0,
+                                    horizontal: 12,
+                                  ),
                                 ),
                               ),
                               const SizedBox(height: 10),
@@ -1780,10 +2048,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                         setStateDialog(() {});
                                       },
                                       controlAffinity:
-                                      ListTileControlAffinity.leading,
+                                          ListTileControlAffinity.leading,
                                       dense: true,
-                                      contentPadding:
-                                      EdgeInsets.symmetric(horizontal: 4),
+                                      contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                      ),
                                     );
                                   }).toList(),
                                 ),
@@ -1795,7 +2064,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                     onPressed: () {
                                       setState(() {
                                         productCheckboxes.updateAll(
-                                                (key, value) => true);
+                                          (key, value) => true,
+                                        );
                                       });
                                       setStateDialog(() {});
                                       Navigator.pop(context);
@@ -1817,7 +2087,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                     child: Text('UnSelect All'),
                                   ),
                                 ],
-                              )
+                              ),
                             ],
                           ),
                         ),
@@ -1861,7 +2131,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                 child: const Text('Unselect All'),
               ),
             ],
-          )
+          ),
         ],
       ),
     );
