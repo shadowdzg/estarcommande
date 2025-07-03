@@ -89,39 +89,80 @@ class PurchaseOrdersPage extends StatefulWidget {
 class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   final _formKey = GlobalKey<FormState>();
 
-  Future<void> fetchPurchaseOrders() async {
+  int _totalOrdersCount = 0;
+  List<Map<String, dynamic>> _currentPageOrders = [];
+
+  Future<void> fetchPurchaseOrders({
+    int page = 0,
+    int pageSize = 10,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? clientsID,
+    String? isValidated,
+    String? operatorName,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
-    print('mzlt nmchi');
+    final int skip = page * pageSize;
+    final int take = pageSize;
+
+    // Build query parameters
+    final Map<String, String> queryParams = {
+      'skip': skip.toString(),
+      'take': take.toString(),
+    };
+    if (startDate != null) {
+      queryParams['startDate'] = startDate.toIso8601String().split('T').first;
+    }
+    if (endDate != null) {
+      queryParams['endDate'] = endDate.toIso8601String().split('T').first;
+    }
+    if (clientsID != null && clientsID.isNotEmpty) {
+      queryParams['ClientsID'] = clientsID;
+    }
+    if (isValidated != null && isValidated.isNotEmpty) {
+      queryParams['isValidated'] = isValidated;
+    }
+    if (operatorName != null && operatorName.isNotEmpty) {
+      queryParams['operator'] = operatorName;
+    }
+
+    final uri = Uri.parse(
+      'http://92.222.248.113:3000/api/v1/commands',
+    ).replace(queryParameters: queryParams);
+
     final response = await http.get(
-      Uri.parse('http://92.222.248.113:3000/api/v1/commands'),
+      uri,
       headers: {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
       },
     );
+    print(response.body);
     if (response.statusCode == 200) {
-      final List<dynamic> data = json.decode(response.body);
+      final Map<String, dynamic> data = json.decode(response.body);
       setState(() {
-        allOrders = data.map<Map<String, dynamic>>((item) {
+        final ordersList = (data['data'] ?? []) as List<dynamic>;
+        _currentPageOrders = ordersList.map<Map<String, dynamic>>((item) {
           return {
             'id': item['id'],
-            'client': item['client']['clientName'] ?? 'Unknown',
+            'client': item['client']?['clientName'] ?? 'Unknown',
             'product': item['operator'] ?? 'Unknown',
             'quantity': item['amount'] ?? 0,
             'prixPercent':
                 double.tryParse(
-                  (item['pourcentage'] ?? '0').replaceAll('%', ''),
+                  (item['pourcentage'] ?? '0').toString().replaceAll('%', ''),
                 ) ??
                 0,
             'state': item['isValidated'] ?? 'En Attente',
-            'name': item['user']['username'] ?? 'Unknown',
+            'name': item['user']?['username'] ?? 'Unknown',
             'number': item['number'] ?? 'Unknown',
             'accepted': item['accepted'] ?? 'Unknown',
             'acceptedBy': item['acceptedBy'] ?? ' ',
             'date': item['createdAt'] ?? '',
           };
         }).toList();
+        _totalOrdersCount = data['totalCount'] ?? _currentPageOrders.length;
       });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -132,17 +173,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     }
   }
 
-  List<Map<String, dynamic>> allOrders = [
-    {
-      'client': 'YOUCEF',
-      'product': 'MOBTASIM',
-      'quantity': 1000,
-      'prixPercent': 100,
-      'state': 'Effectué',
-      'name': 'Aymen',
-      'date': '2025-06-03',
-    },
-  ];
+  // Deprecated: allOrders is not used for paginated backend data anymore.
+  List<Map<String, dynamic>> allOrders = [];
 
   String searchQuery = '';
   String productQuery = '';
@@ -199,7 +231,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   }
 
   List<Map<String, dynamic>> get filteredOrders {
-    final filtered = allOrders.where((order) {
+    final filtered = _currentPageOrders.where((order) {
       final clientMatch = order['client'].toLowerCase().contains(
         searchQuery.toLowerCase(),
       );
@@ -1068,17 +1100,13 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   int _currentPage = 0;
   final int _rowsPerPage = 10;
 
-  List get paginatedOrders {
-    final startIndex = _currentPage * _rowsPerPage;
-    final endIndex = (startIndex + _rowsPerPage).clamp(
-      0,
-      filteredOrders.length,
-    );
-    return filteredOrders.sublist(startIndex, endIndex);
+  List<Map<String, dynamic>> get paginatedOrders {
+    // Since backend already paginates, just return filteredOrders (which is _currentPageOrders filtered)
+    return filteredOrders;
   }
 
   Widget _buildPaginationControls() {
-    final totalPages = (filteredOrders.length / _rowsPerPage).ceil();
+    final totalPages = (_totalOrdersCount / _rowsPerPage).ceil();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
@@ -1087,14 +1115,30 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           IconButton(
             icon: const Icon(Icons.arrow_back_ios),
             onPressed: _currentPage > 0
-                ? () => setState(() => _currentPage--)
+                ? () async {
+                    setState(() {
+                      _currentPage--;
+                    });
+                    await fetchPurchaseOrders(
+                      page: _currentPage,
+                      pageSize: _rowsPerPage,
+                    );
+                  }
                 : null,
           ),
           Text('Page ${_currentPage + 1} of $totalPages'),
           IconButton(
             icon: const Icon(Icons.arrow_forward_ios),
             onPressed: (_currentPage + 1) < totalPages
-                ? () => setState(() => _currentPage++)
+                ? () async {
+                    setState(() {
+                      _currentPage++;
+                    });
+                    await fetchPurchaseOrders(
+                      page: _currentPage,
+                      pageSize: _rowsPerPage,
+                    );
+                  }
                 : null,
           ),
         ],

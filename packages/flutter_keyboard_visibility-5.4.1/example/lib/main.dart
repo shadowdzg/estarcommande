@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
-import 'package:flutter_keyboard_visibility_example/keyboard_dismiss_demo.dart';
-import 'package:flutter_keyboard_visibility_example/provider_demo.dart';
+import 'keyboard_dismiss_demo.dart';
+import 'provider_demo.dart';
 
 void main() {
   runApp(App());
