@@ -18,6 +18,42 @@ import 'package:flutter/services.dart'; // For Clipboard
 import 'package:excel/excel.dart' as excel;
 import 'package:path/path.dart' as p;
 
+// Product class for database integration
+class Product {
+  final String? productID;
+  final String? productName;
+  final String? description;
+  final double? initialPrice;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
+  Product({
+    this.productID,
+    this.productName,
+    this.description,
+    this.initialPrice,
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  factory Product.fromJson(Map<String, dynamic> json) {
+    return Product(
+      productID: json['productID']?.toString() ?? '',
+      productName: json['productName']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      initialPrice: json['initialPrice'] != null
+          ? double.tryParse(json['initialPrice'].toString())
+          : null,
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'].toString())
+          : null,
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.tryParse(json['updatedAt'].toString())
+          : null,
+    );
+  }
+}
+
 bool sortAscending = true;
 String sortColumn = 'date';
 String? selectedState;
@@ -91,7 +127,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   Future<void> fetchPurchaseOrders({
     int page = 0,
     int pageSize = 10,
-    bool keepPage = true, // Add this parameter
+    bool keepPage = true,
+    String? searchQuery,
+    String? stateFilter,
+    List<String>? productFilters,
+    DateTimeRange? dateRange,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
@@ -104,6 +144,45 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       'skip': skip.toString(),
       'take': take.toString(),
     };
+
+    // Add date range filters
+    if (dateRange != null) {
+      queryParams['startDate'] = dateRange.start.toIso8601String().split(
+        'T',
+      )[0]; // Format: YYYY-MM-DD
+      queryParams['endDate'] = dateRange.end.toIso8601String().split('T')[0];
+    }
+
+    // Add state filter (using backend's field name)
+    if (stateFilter != null && stateFilter.isNotEmpty) {
+      // Map frontend state names to backend values if needed
+      String backendState = stateFilter;
+      switch (stateFilter) {
+        case 'En Attente':
+          backendState = 'En Attente';
+          break;
+        case 'Effectué':
+          backendState = 'Effectué';
+          break;
+        case 'Rejeté':
+          backendState = 'Rejeté';
+          break;
+        case 'Numéro Incorrecte':
+          backendState = 'Numéro Incorrecte';
+          break;
+        case 'Problème Solde':
+          backendState = 'Problème Solde';
+          break;
+      }
+      queryParams['isValidated'] = backendState;
+    }
+
+    // Add product filter (using backend's field name 'operator')
+    if (productFilters != null && productFilters.length == 1) {
+      // Single product filter - use API filtering
+      queryParams['operator'] = productFilters.first;
+    }
+    // For multiple products, we'll fetch all and filter client-side
 
     final uri = Uri.parse(
       'http://92.222.248.113:3000/api/v1/commands',
@@ -122,28 +201,48 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         final Map<String, dynamic> data = json.decode(response.body);
         if (!mounted) return;
 
-        setState(() {
-          final ordersList = (data['data'] ?? []) as List<dynamic>;
-          _currentPageOrders = ordersList.map<Map<String, dynamic>>((item) {
-            return {
-              'id': item['id'],
-              'client': item['client']?['clientName'] ?? 'Unknown',
-              'product': item['operator'] ?? 'Unknown',
-              'quantity': item['amount'] ?? 0,
-              'prixPercent':
-                  double.tryParse(
-                    (item['pourcentage'] ?? '0').toString().replaceAll('%', ''),
-                  ) ??
-                  0,
-              'state': item['isValidated'] ?? 'En Attente',
-              'name': item['user']?['username'] ?? 'Unknown',
-              'number': item['number'] ?? 'Unknown',
-              'accepted': item['accepted'] ?? 'Unknown',
-              'acceptedBy': item['acceptedBy'] ?? ' ',
-              'date': item['createdAt'] ?? '',
-            };
+        // Parse orders from response
+        final ordersList = (data['data'] ?? []) as List<dynamic>;
+        final allOrders = ordersList.map<Map<String, dynamic>>((item) {
+          return {
+            'id': item['id'],
+            'client': item['client']?['clientName'] ?? 'Unknown',
+            'product': item['operator'] ?? 'Unknown',
+            'quantity': item['amount'] ?? 0,
+            'prixPercent':
+                double.tryParse(
+                  (item['pourcentage'] ?? '0').toString().replaceAll('%', ''),
+                ) ??
+                0,
+            'state': item['isValidated'] ?? 'En Attente',
+            'name': item['user']?['username'] ?? 'Unknown',
+            'number': item['number'] ?? 'Unknown',
+            'accepted': item['accepted'] ?? 'Unknown',
+            'acceptedBy': item['acceptedBy'] ?? ' ',
+            'date': item['createdAt'] ?? '',
+          };
+        }).toList();
+
+        // Apply client-side search filter (since API doesn't seem to support client name search)
+        List<Map<String, dynamic>> filteredOrders = allOrders;
+        if (searchQuery != null && searchQuery.isNotEmpty) {
+          filteredOrders = allOrders.where((order) {
+            return order['client'].toLowerCase().contains(
+              searchQuery.toLowerCase(),
+            );
           }).toList();
-          _totalOrdersCount = data['totalCount'] ?? _currentPageOrders.length;
+        }
+
+        // If multiple products are selected, apply client-side filtering
+        if (productFilters != null && productFilters.length > 1) {
+          filteredOrders = filteredOrders.where((order) {
+            return productFilters.contains(order['product']);
+          }).toList();
+        }
+
+        setState(() {
+          _currentPageOrders = filteredOrders;
+          _totalOrdersCount = data['totalCount'] ?? filteredOrders.length;
         });
       }
     } catch (e) {
@@ -229,73 +328,93 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     await prefs.setString('whatsapp_number', number);
   }
 
+  // Apply filters and refresh data
+  Future<void> _applyFiltersAndRefresh() async {
+    // Get selected products
+    final selectedProducts = productCheckboxes.entries
+        .where((entry) => entry.value)
+        .map((entry) => entry.key)
+        .toList();
+
+    // If no products are selected, select all products
+    final List<String>? productFilters = selectedProducts.isEmpty
+        ? null
+        : selectedProducts;
+
+    await fetchPurchaseOrders(
+      page: 0, // Reset to first page when applying filters
+      pageSize: _rowsPerPage,
+      keepPage: false,
+      searchQuery: searchQuery.isNotEmpty ? searchQuery : null,
+      stateFilter: selectedState,
+      productFilters: productFilters,
+      dateRange: selectedDateRange,
+    );
+
+    // Reset current page to 0 when filters are applied
+    setState(() {
+      _currentPage = 0;
+    });
+  }
+
+  // Fetch with current filters (for pagination)
+  Future<void> _fetchWithCurrentFilters({required int page}) async {
+    final selectedProducts = productCheckboxes.entries
+        .where((entry) => entry.value)
+        .map((entry) => entry.key)
+        .toList();
+
+    // If no products are selected, select all products
+    final List<String>? productFilters = selectedProducts.isEmpty
+        ? null
+        : selectedProducts;
+
+    await fetchPurchaseOrders(
+      page: page,
+      pageSize: _rowsPerPage,
+      keepPage: true,
+      searchQuery: searchQuery.isNotEmpty ? searchQuery : null,
+      stateFilter: selectedState,
+      productFilters: productFilters,
+      dateRange: selectedDateRange,
+    );
+  }
+
   List<Map<String, dynamic>> get filteredOrders {
-    final filtered = _currentPageOrders.where((order) {
-      final clientMatch = order['client'].toLowerCase().contains(
-        searchQuery.toLowerCase(),
-      );
-      final stateMatch =
-          selectedState == null || order['state'] == selectedState;
-      bool dateMatch = true;
-      if (selectedDateRange != null) {
-        try {
-          final orderDate = DateTime.parse(order['date']);
-          dateMatch =
-              orderDate.isAfter(
-                selectedDateRange!.start.subtract(const Duration(days: 1)),
-              ) &&
-              orderDate.isBefore(
-                selectedDateRange!.end.add(const Duration(days: 1)),
-              );
-        } catch (_) {
-          dateMatch = false;
-        }
-      }
-
-      // Check if any product is selected and matches current order
-      final selectedProducts = productCheckboxes.entries
-          .where((entry) => entry.value)
-          .map((entry) => entry.key)
-          .toList();
-      final productMatch = selectedProducts.isEmpty
-          ? false
-          : selectedProducts.contains(order['product']);
-
-      return clientMatch && stateMatch && dateMatch && productMatch;
-    }).toList();
-    return filtered;
+    // Since filtering is now done on the backend, just return current page orders
+    return _currentPageOrders;
   }
 
   void exportToExcel(List<Map<String, dynamic>> data) async {
     var excelFile = excel.Excel.createExcel();
     final excel.Sheet sheet = excelFile['Sheet1'];
-    List<String> headers = [
-      'ID',
-      'Client',
-      'Product',
-      'Qty',
-      'Prix %',
-      'State',
-      'Name',
-      'Number',
-      'Accepted',
-      'Accepted By',
-      'Date',
+    List<excel.CellValue?> headers = [
+      excel.TextCellValue('ID'),
+      excel.TextCellValue('Client'),
+      excel.TextCellValue('Product'),
+      excel.TextCellValue('Qty'),
+      excel.TextCellValue('Prix %'),
+      excel.TextCellValue('State'),
+      excel.TextCellValue('Name'),
+      excel.TextCellValue('Number'),
+      excel.TextCellValue('Accepted'),
+      excel.TextCellValue('Accepted By'),
+      excel.TextCellValue('Date'),
     ];
     sheet.appendRow(headers);
     for (var item in data) {
-      List<dynamic> row = [
-        item['id'].toString(),
-        item['client'],
-        item['product'],
-        item['quantity'],
-        item['prixPercent'],
-        item['state'],
-        item['name'],
-        item['number'],
-        item['accepted'].toString(),
-        item['acceptedBy'],
-        item['date'],
+      List<excel.CellValue?> row = [
+        excel.TextCellValue(item['id'].toString()),
+        excel.TextCellValue(item['client']),
+        excel.TextCellValue(item['product']),
+        excel.TextCellValue(item['quantity'].toString()),
+        excel.TextCellValue(item['prixPercent'].toString()),
+        excel.TextCellValue(item['state']),
+        excel.TextCellValue(item['name']),
+        excel.TextCellValue(item['number']),
+        excel.TextCellValue(item['accepted'].toString()),
+        excel.TextCellValue(item['acceptedBy'] ?? ''),
+        excel.TextCellValue(item['date']),
       ];
       sheet.appendRow(row);
     }
@@ -334,11 +453,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       );
 
       if (response.statusCode == 200 || response.statusCode == 204) {
-        await fetchPurchaseOrders(
-          page: _currentPage,
-          pageSize: _rowsPerPage,
-          keepPage: true,
-        );
+        await _fetchWithCurrentFilters(page: _currentPage);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Order deleted successfully')),
         );
@@ -402,11 +517,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         body: jsonEncode({'isValidated': newState}),
       );
       if (response.statusCode == 200) {
-        await fetchPurchaseOrders(
-          page: _currentPage,
-          pageSize: _rowsPerPage,
-          keepPage: true,
-        );
+        await _fetchWithCurrentFilters(page: _currentPage);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Order state updated successfully')),
         );
@@ -440,6 +551,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       body: jsonEncode({'accepted': accepted}),
     );
     if (response.statusCode == 200) {
+      await _fetchWithCurrentFilters(page: _currentPage);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Order updated successfully')),
       );
@@ -543,103 +655,181 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   void _showAddOrderDialog() {
     final clientController = TextEditingController();
     final numberController = TextEditingController();
-    final prixPercentController = TextEditingController();
     Map<String, String> clientsMap = {};
     String? selectedClientName;
 
     List<Map<String, dynamic>> selectedProducts = [];
+    List<Product> availableProducts = [];
 
-    final List<String> productList = [
-      'SEHELLI STORM PRIMAIRE',
-      'SEHELLI FLEXY PRIMAIRE',
-      'SEHELLI FLEXY EST',
-      'SEHELLI FLEXY CENTRE',
-      'SEHELLI FLEXY SUD',
-      'SEHELLI FLEXY AUXILIAIRE',
-      'STORM STI',
-      'STORM',
-      'SEHELLI ARSELLI PRIMAIRE',
-      'ARSELLI DATA',
-      'SEHELLI STORM AUXILLIAIRE',
-      'SEHELLI ARSELLI AUXILLIAIRE',
-      'FLEXY',
-      'ARSELLI',
-      'ARSELLI IZI',
-      'FLEXY IZI',
-      'STORM IZI',
-      'telegrame',
-      'STORM AUXILLIAIRE',
-      'FLEXY AUXILLIAIRE',
-      'IDOOM 4G',
-      'IDOOM 500',
-      'IDOOM 1000',
-      'IDOOM 2000',
-      'FLEXY  EST',
-      'FLEXY SUD',
-      'FLEXY CENTRE',
-      'FLEXY ',
-    ];
+    // Fetch products from database
+    Future<void> fetchProducts() async {
+      try {
+        final response = await http.get(
+          Uri.parse('http://92.222.248.113:3000/api/v1/products'),
+        );
+        if (response.statusCode == 200) {
+          final List<dynamic> data = json.decode(response.body);
+          availableProducts = data
+              .map((json) => Product.fromJson(json))
+              .toList();
+        }
+      } catch (e) {
+        // Handle error if needed
+      }
+    }
 
     Widget buildMultiProductInput(BuildContext context) {
       return StatefulBuilder(
         builder: (context, setStateDialog) {
-          return Column(
-            children: [
-              TypeAheadFormField<String>(
-                textFieldConfiguration: TextFieldConfiguration(
-                  decoration: InputDecoration(labelText: 'Search Product'),
-                ),
-                suggestionsCallback: (pattern) => productList
-                    .where(
-                      (p) => p.toLowerCase().contains(pattern.toLowerCase()),
-                    )
-                    .toList(),
-                itemBuilder: (context, suggestion) =>
-                    ListTile(title: Text(suggestion)),
-                onSuggestionSelected: (suggestion) {
-                  setStateDialog(() {
-                    selectedProducts.add({
-                      'product': suggestion,
-                      'quantity': 0,
-                    });
-                  });
-                },
-              ),
-              const SizedBox(height: 8),
-              ListView.builder(
-                shrinkWrap: true,
-                physics: NeverScrollableScrollPhysics(),
-                itemCount: selectedProducts.length,
-                itemBuilder: (context, index) {
-                  final item = selectedProducts[index];
-                  return Row(
-                    children: [
-                      Expanded(child: Text(item['product'])),
-                      SizedBox(width: 16),
-                      SizedBox(
-                        width: 100,
-                        child: TextFormField(
-                          initialValue: item['quantity'].toString(),
-                          keyboardType: TextInputType.number,
-                          onChanged: (value) {
-                            item['quantity'] = int.tryParse(value) ?? 0;
-                          },
-                          decoration: InputDecoration(hintText: 'Qty'),
+          return FutureBuilder<void>(
+            future: fetchProducts(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Center(child: CircularProgressIndicator());
+              }
+
+              return Column(
+                children: [
+                  TypeAheadField<Product>(
+                    builder: (context, controller, focusNode) {
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        decoration: InputDecoration(
+                          labelText: 'Search Product',
+                          suffixIcon: Icon(Icons.search),
+                          border: OutlineInputBorder(),
                         ),
+                      );
+                    },
+                    suggestionsCallback: (pattern) => availableProducts
+                        .where(
+                          (p) => p.productName!.toLowerCase().contains(
+                            pattern.toLowerCase(),
+                          ),
+                        )
+                        .toList(),
+                    itemBuilder: (context, Product suggestion) => ListTile(
+                      title: Text(suggestion.productName ?? ''),
+                      subtitle: Text(
+                        'Prix: ${suggestion.initialPrice?.toStringAsFixed(2) ?? '0.00'} DA',
                       ),
-                      IconButton(
-                        icon: Icon(Icons.remove_circle, color: Colors.red),
-                        onPressed: () {
-                          setStateDialog(() {
-                            selectedProducts.removeAt(index);
-                          });
-                        },
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ],
+                    ),
+                    onSelected: (Product suggestion) {
+                      setStateDialog(() {
+                        selectedProducts.add({
+                          'product': suggestion.productName ?? '',
+                          'productId': suggestion.productID ?? '',
+                          'quantity': 1,
+                          'unitPrice': suggestion.initialPrice ?? 0.0,
+                        });
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  if (selectedProducts.isNotEmpty)
+                    Container(
+                      height: selectedProducts.length > 5 
+                          ? 400.0 // Max height for 5 items
+                          : selectedProducts.length * 80.0,
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: selectedProducts.length,
+                        itemBuilder: (context, index) {
+                        final item = selectedProducts[index];
+                        return Card(
+                          margin: EdgeInsets.symmetric(vertical: 4),
+                          child: Padding(
+                            padding: EdgeInsets.all(8),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        item['product'],
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Prix BD: ${item['unitPrice'].toStringAsFixed(2)} DA',
+                                        style: TextStyle(
+                                          color: Colors.grey[600],
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                SizedBox(width: 4),
+                                Expanded(
+                                  flex: 1,
+                                  child: TextFormField(
+                                    initialValue: item['unitPrice'].toStringAsFixed(2),
+                                    keyboardType: TextInputType.numberWithOptions(decimal: true),
+                                    enabled: !isclient, // Read-only for clients
+                                    onChanged: (value) {
+                                      item['unitPrice'] = double.tryParse(value) ?? item['unitPrice'];
+                                    },
+                                    decoration: InputDecoration(
+                                      labelText: 'PU',
+                                      border: OutlineInputBorder(),
+                                      contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 4,
+                                      ),
+                                      fillColor: isclient ? Colors.grey[100] : null,
+                                      filled: isclient,
+                                    ),
+                                    style: TextStyle(
+                                      color: isclient ? Colors.grey[600] : null,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 4),
+                                Expanded(
+                                  flex: 1,
+                                  child: TextFormField(
+                                    initialValue: item['quantity'].toString(),
+                                    keyboardType: TextInputType.number,
+                                    onChanged: (value) {
+                                      item['quantity'] = int.tryParse(value) ?? 1;
+                                    },
+                                    decoration: InputDecoration(
+                                      labelText: 'Qty',
+                                      border: OutlineInputBorder(),
+                                      contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 4,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.remove_circle,
+                                    color: Colors.red,
+                                  ),
+                                  onPressed: () {
+                                    setStateDialog(() {
+                                      selectedProducts.removeAt(index);
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ), // End of ListView.builder
+                  ), // End of Container
+                ],
+              );
+            },
           );
         },
       );
@@ -647,149 +837,227 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Add New Order'),
-        content: SingleChildScrollView(
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+      builder: (_) {
+        final screenWidth = MediaQuery.of(context).size.width;
+        final screenHeight = MediaQuery.of(context).size.height;
+        
+        // Responsive sizing based on screen width
+        double dialogWidth;
+        double dialogHeight;
+        double maxWidth;
+        double maxHeight;
+        
+        if (screenWidth > 1200) {
+          // Large desktop
+          dialogWidth = screenWidth * 0.6;
+          dialogHeight = screenHeight * 0.65;
+          maxWidth = 700;
+          maxHeight = 550;
+        } else if (screenWidth > 800) {
+          // Medium desktop/tablet
+          dialogWidth = screenWidth * 0.75;
+          dialogHeight = screenHeight * 0.70;
+          maxWidth = 600;
+          maxHeight = 500;
+        } else {
+          // Small screens/mobile
+          dialogWidth = screenWidth * 0.90;
+          dialogHeight = screenHeight * 0.75;
+          maxWidth = 500;
+          maxHeight = 450;
+        }
+        
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            width: dialogWidth,
+            height: dialogHeight,
+            constraints: BoxConstraints(
+              maxWidth: maxWidth,
+              maxHeight: maxHeight,
+              minWidth: 450,
+              minHeight: 350,
+            ),
+            padding: const EdgeInsets.all(24.0),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Add New Order',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                 isclient
                     ? SizedBox()
-                    : TypeAheadFormField<String>(
-                        textFieldConfiguration: TextFieldConfiguration(
-                          controller: clientController,
-                          decoration: const InputDecoration(
-                            labelText: 'Client',
-                            prefixIcon: Icon(Icons.person),
-                            border: OutlineInputBorder(),
-                          ),
-                          keyboardType: TextInputType.none, // Prevents keyboard
-                          enabled:
-                              true, // Makes the whole field non-interactive
-                        ),
+                    : TypeAheadField<String>(
+                        builder: (context, controller, focusNode) {
+                          return TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            decoration: const InputDecoration(
+                              labelText: 'Client',
+                              prefixIcon: Icon(Icons.person),
+                              border: OutlineInputBorder(),
+                            ),
+                            onChanged: (value) {
+                              clientController.text = value;
+                            },
+                          );
+                        },
                         suggestionsCallback: (pattern) async {
                           if (pattern.isEmpty) return [];
-                          final response = await http.get(
-                            Uri.parse(
-                              'http://92.222.248.113:3000/api/v1/clients/search?term=$pattern',
-                            ),
-                          );
-                          if (response.statusCode == 200) {
-                            final List<dynamic> clientsJson = jsonDecode(
-                              response.body,
+                          try {
+                            final prefs = await SharedPreferences.getInstance();
+                            final token = prefs.getString('auth_token') ?? '';
+                            
+                            final response = await http.get(
+                              Uri.parse(
+                                'http://92.222.248.113:3000/api/v1/clients/search?term=$pattern',
+                              ),
+                              headers: {
+                                'Authorization': 'Bearer $token',
+                                'Content-Type': 'application/json',
+                              },
                             );
-                            clientsMap = {
-                              for (var client in clientsJson)
-                                client['clientName']: client['clientsID'],
-                            };
-                            return clientsMap.keys.toList();
-                          } else {
+                            if (response.statusCode == 200) {
+                              final List<dynamic> clientsJson = jsonDecode(
+                                response.body,
+                              );
+                              clientsMap = {
+                                for (var client in clientsJson)
+                                  client['clientName']: client['clientsID'],
+                              };
+                              return clientsMap.keys.toList();
+                            } else {
+                              print('Client search failed: ${response.statusCode}');
+                              return [];
+                            }
+                          } catch (e) {
+                            print('Client search error: $e');
                             return [];
                           }
                         },
                         itemBuilder: (context, String suggestion) =>
                             ListTile(title: Text(suggestion)),
-                        onSuggestionSelected: (String suggestion) {
+                        onSelected: (String suggestion) {
                           clientController.text = suggestion;
                           selectedClientName = suggestion;
                         },
-                        validator: (value) =>
-                            (value == null || value.trim().isEmpty)
-                            ? 'Client is required'
-                            : null,
                       ),
                 const SizedBox(height: 16),
                 buildMultiProductInput(context),
                 const SizedBox(height: 16),
-                TextFormField(
-                  controller: prixPercentController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Pourcentage %'),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: numberController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Number'),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () async {
-              final prefs = await SharedPreferences.getInstance();
-              final token = prefs.getString('auth_token') ?? '';
-              final payload = decodeJwtPayload(token);
-
-              if (_formKey.currentState!.validate()) {
-                if (selectedProducts.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Please add at least one product")),
-                  );
-                  return;
-                }
-
-                final clientId = clientsMap[selectedClientName];
-
-                for (var item in selectedProducts) {
-                  final product = item['product'];
-                  final quantity = item['quantity'];
-
-                  if (quantity <= 0) continue;
-
-                  final response = await http.post(
-                    Uri.parse('http://92.222.248.113:3000/api/v1/commands'),
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'Authorization': 'Bearer $token',
-                    },
-                    body: jsonEncode({
-                      'operator': product,
-                      'amount': quantity,
-                      'ClientsID': isclient ? payload['clid'] : clientId,
-                      'isValidated': 'En Attente',
-                      'pourcentage':
-                          '${double.tryParse(prixPercentController.text) ?? 0}%',
-                      'number': numberController.text,
-                    }),
-                  );
-
-                  if (response.statusCode == 201 ||
-                      response.statusCode == 200) {
-                    // Refresh the current page orders instead of modifying local state
-                    await fetchPurchaseOrders(
-                      page: _currentPage,
-                      pageSize: _rowsPerPage,
-                      keepPage: true,
-                    );
-                  }
-                }
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      "${selectedProducts.length} Orders created successfully",
+                        TextFormField(
+                          controller: numberController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'Number'),
+                        ),
+                      ],
                     ),
                   ),
-                );
-                Navigator.pop(context);
-              }
-            },
-            icon: const Icon(Icons.add),
-            label: const Text('Add'),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 16),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      final prefs = await SharedPreferences.getInstance();
+                      final token = prefs.getString('auth_token') ?? '';
+                      final payload = decodeJwtPayload(token);
+
+                      if (_formKey.currentState!.validate()) {
+                        if (selectedProducts.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text("Please add at least one product")),
+                          );
+                          return;
+                        }
+
+                        final clientId = clientsMap[selectedClientName];
+
+                        for (var item in selectedProducts) {
+                          final product = item['product'];
+                          final quantity = item['quantity'];
+                          final unitPrice = item['unitPrice'];
+
+                          if (quantity <= 0) continue;
+
+                          final response = await http.post(
+                            Uri.parse('http://92.222.248.113:3000/api/v1/commands'),
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'Authorization': 'Bearer $token',
+                            },
+                            body: jsonEncode({
+                              'operator': product,
+                              'amount': quantity,
+                              'ClientsID': isclient ? payload['clid'] : clientId,
+                              'isValidated': 'En Attente',
+                              'pourcentage':
+                                  '${unitPrice}%', // Use initial price as percentage
+                              'number': numberController.text,
+                            }),
+                          );
+
+                          if (response.statusCode == 201 ||
+                              response.statusCode == 200) {
+                            // Refresh the current page orders instead of modifying local state
+                            await _fetchWithCurrentFilters(page: _currentPage);
+                          }
+                        }
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              "${selectedProducts.length} Orders created successfully",
+                            ),
+                          ),
+                        );
+                        Navigator.pop(context);
+                      }
+                    },
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade600,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
-      ),
-    );
+          )); // Close Container
+      }, // Close builder function
+    ); // Close showDialog
   }
 
   void _updateOrder(int index, Map<String, dynamic> updatedOrder) async {
@@ -822,11 +1090,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     );
     if (response.statusCode == 200) {
       // Refresh the current page orders instead of modifying local state
-      await fetchPurchaseOrders(
-        page: _currentPage,
-        pageSize: _rowsPerPage,
-        keepPage: true,
-      );
+      await _fetchWithCurrentFilters(page: _currentPage);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Order updated successfully')),
       );
@@ -933,45 +1197,57 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                       ),
                       if (_selectedRole == UserRole.user) ...[
                         SizedBox(height: 12),
-                        TypeAheadFormField<String>(
-                          textFieldConfiguration: TextFieldConfiguration(
-                            controller: _extraInfoController,
-                            decoration: InputDecoration(
-                              labelText: 'Client',
-                              prefixIcon: Icon(Icons.person),
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                          suggestionsCallback: (pattern) async {
-                            if (pattern.isEmpty) return [];
-                            final response = await http.get(
-                              Uri.parse(
-                                'http://92.222.248.113:3000/api/v1/clients/search?term=$pattern',
+                        TypeAheadField<String>(
+                          builder: (context, controller, focusNode) {
+                            return TextField(
+                              controller: _extraInfoController,
+                              focusNode: focusNode,
+                              decoration: InputDecoration(
+                                labelText: 'Client',
+                                prefixIcon: Icon(Icons.person),
+                                border: OutlineInputBorder(),
                               ),
                             );
-                            if (response.statusCode == 200) {
-                              final List<dynamic> clientsJson = jsonDecode(
-                                response.body,
+                          },
+                          suggestionsCallback: (pattern) async {
+                            if (pattern.isEmpty) return [];
+                            try {
+                              final prefs = await SharedPreferences.getInstance();
+                              final token = prefs.getString('auth_token') ?? '';
+                              
+                              final response = await http.get(
+                                Uri.parse(
+                                  'http://92.222.248.113:3000/api/v1/clients/search?term=$pattern',
+                                ),
+                                headers: {
+                                  'Authorization': 'Bearer $token',
+                                  'Content-Type': 'application/json',
+                                },
                               );
-                              CreateClientsMap = {
-                                for (var client in clientsJson)
-                                  client['clientName']: client['clientsID'],
-                              };
-                              return CreateClientsMap.keys.toList();
-                            } else {
+                              if (response.statusCode == 200) {
+                                final List<dynamic> clientsJson = jsonDecode(
+                                  response.body,
+                                );
+                                CreateClientsMap = {
+                                  for (var client in clientsJson)
+                                    client['clientName']: client['clientsID'],
+                                };
+                                return CreateClientsMap.keys.toList();
+                              } else {
+                                print('Client search failed: ${response.statusCode}');
+                                return [];
+                              }
+                            } catch (e) {
+                              print('Client search error: $e');
                               return [];
                             }
                           },
                           itemBuilder: (context, suggestion) =>
                               ListTile(title: Text(suggestion)),
-                          onSuggestionSelected: (suggestion) {
+                          onSelected: (suggestion) {
                             _extraInfoController.text = suggestion;
                             selectedCrClientName = suggestion;
                           },
-                          validator: (value) =>
-                              (value == null || value.trim().isEmpty)
-                              ? 'Client is required'
-                              : null,
                         ),
                       ],
                     ],
@@ -1207,14 +1483,23 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   }
 
   Timer? _refreshTimer;
+  Timer? _searchTimer;
+
+  void _onSearchChanged(String value) {
+    setState(() => searchQuery = value);
+
+    // Cancel previous timer
+    _searchTimer?.cancel();
+
+    // Start new timer
+    _searchTimer = Timer(const Duration(milliseconds: 500), () {
+      _applyFiltersAndRefresh();
+    });
+  }
 
   void _startAutoRefresh() {
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      fetchPurchaseOrders(
-        page: _currentPage,
-        pageSize: _rowsPerPage,
-        keepPage: true,
-      );
+      _fetchWithCurrentFilters(page: _currentPage);
     });
   }
 
@@ -1310,10 +1595,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                     setState(() {
                       _currentPage--;
                     });
-                    await fetchPurchaseOrders(
-                      page: _currentPage,
-                      pageSize: _rowsPerPage,
-                    );
+                    await _fetchWithCurrentFilters(page: _currentPage);
                   }
                 : null,
           ),
@@ -1325,10 +1607,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                     setState(() {
                       _currentPage++;
                     });
-                    await fetchPurchaseOrders(
-                      page: _currentPage,
-                      pageSize: _rowsPerPage,
-                    );
+                    await _fetchWithCurrentFilters(page: _currentPage);
                   }
                 : null,
           ),
@@ -1340,6 +1619,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _searchTimer?.cancel();
     super.dispose();
   }
 
@@ -1471,8 +1751,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                   filled: true,
                                   fillColor: Colors.grey.shade50,
                                 ),
-                                onChanged: (val) =>
-                                    setState(() => searchQuery = val),
+                                onChanged: _onSearchChanged,
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -1527,8 +1806,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                               ),
                                             )
                                             .toList(),
-                                    onChanged: (value) =>
-                                        setState(() => selectedState = value),
+                                    onChanged: (value) {
+                                      setState(() => selectedState = value);
+                                      _applyFiltersAndRefresh();
+                                    },
                                   ),
                                 ),
                               ),
@@ -1551,6 +1832,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                 );
                                 if (picked != null) {
                                   setState(() => selectedDateRange = picked);
+                                  _applyFiltersAndRefresh();
                                 }
                               },
                               icon: const Icon(Icons.date_range, size: 18),
@@ -1589,7 +1871,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                   searchQuery = '';
                                   selectedDateRange = null;
                                   selectedState = null;
+                                  productCheckboxes.updateAll(
+                                    (key, value) => true,
+                                  );
                                 });
+                                _applyFiltersAndRefresh();
                               },
                               icon: const Icon(Icons.refresh, size: 18),
                               label: const Text('Réinitialiser'),
@@ -1690,7 +1976,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                             prefixIcon: Icon(Icons.search),
                             border: OutlineInputBorder(),
                           ),
-                          onChanged: (val) => setState(() => searchQuery = val),
+                          onChanged: _onSearchChanged,
                         ),
                       ),
                       AnimatedCrossFade(
@@ -1725,9 +2011,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                                   ),
                                                 )
                                                 .toList(),
-                                        onChanged: (value) => setState(
-                                          () => selectedState = value,
-                                        ),
+                                        onChanged: (value) {
+                                          setState(() => selectedState = value);
+                                          _applyFiltersAndRefresh();
+                                        },
                                       ),
                                     ),
                                   ],
@@ -1750,6 +2037,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                           setState(
                                             () => selectedDateRange = picked,
                                           );
+                                          _applyFiltersAndRefresh();
                                         }
                                       },
                                       icon: const Icon(
@@ -1795,7 +2083,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                           searchQuery = '';
                                           selectedDateRange = null;
                                           selectedState = null;
+                                          productCheckboxes.updateAll(
+                                            (key, value) => true,
+                                          );
                                         });
+                                        _applyFiltersAndRefresh();
                                       },
                                       icon: const Icon(Icons.refresh, size: 16),
                                       label: const Text('Reset'),
@@ -1871,8 +2163,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                         duration: const Duration(milliseconds: 300),
                       ),
                     ],
-                  ),
-                );
+                  ));
               }
             },
           ),
@@ -2101,9 +2392,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                 ),
                               ),
                             );
-                          },
-                        ),
-                      ),
+                          }, // End of itemBuilder function
+                        ), // End of ListView.builder
+                      ), // End of Expanded
                       _buildPaginationControls(),
                     ],
                   );
@@ -2240,7 +2531,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                                     'Effectué',
                                                   ),
                                             ),
-                                            const SizedBox(width: 6),
+                                            const SizedBox(width:  6),
                                             IconButton(
                                               icon: const Icon(
                                                 Icons.close,
@@ -2297,9 +2588,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                               onPressed: () =>
                                                   _showEditDialog(realIndex),
                                             ),
-                                            if (order['product'] ==
-                                                    'STORM STI' ||
-                                                order['product'] == 'FLEXY')
+                                            if (order['product'] == 'STORM STI')
                                               IconButton(
                                                 icon: const Icon(
                                                   FontAwesomeIcons.whatsapp,
@@ -2315,9 +2604,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                                 color: Colors.black,
                                               ),
                                               onPressed: () =>
-                                                  _confirmDeleteOrder(
-                                                    realIndex,
-                                                  ),
+                                                  _confirmDeleteOrder(realIndex),
                                             ),
                                           ],
                                         ),
@@ -2381,9 +2668,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
             TextEditingController searchController = TextEditingController();
             List<String> filteredProducts = productCheckboxes.keys.toList();
             return StatefulBuilder(
-              builder: (context, setStateDialog) {
+              builder: (context, setState) {
                 void filterSearch(String query) {
-                  setStateDialog(() {
+                  setState(() {
                     filteredProducts = productCheckboxes.keys
                         .where(
                           (product) => product.toLowerCase().contains(
@@ -2443,7 +2730,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                   setState(() {
                                     productCheckboxes[product] = value!;
                                   });
-                                  setStateDialog(() {});
+                                  _applyFiltersAndRefresh();
                                 },
                                 controlAffinity:
                                     ListTileControlAffinity.leading,
@@ -2462,7 +2749,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                     (key, value) => true,
                                   );
                                 });
-                                setStateDialog(() {});
+                                _applyFiltersAndRefresh();
                               },
                               child: Text('Tout Sélectionner'),
                             ),
@@ -2473,7 +2760,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                     (key, value) => false,
                                   );
                                 });
-                                setStateDialog(() {});
+                                _applyFiltersAndRefresh();
                               },
                               child: Text('Tout Désélectionner'),
                             ),
