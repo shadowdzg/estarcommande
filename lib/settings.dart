@@ -145,7 +145,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
             )
             .toList(),
       ),
-      drawer: const AppDrawer(), // <-- Use the shared drawer here
+      drawer: const AppDrawer(orders: []),
     );
   }
 

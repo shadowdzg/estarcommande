@@ -17,7 +17,8 @@ Map<String, dynamic> decodeJwtPayload(String token) {
 }
 
 class AppDrawer extends StatelessWidget {
-  const AppDrawer({super.key});
+  final List<Map<String, dynamic>> orders;
+  const AppDrawer({super.key, required this.orders});
 
   Future<Map<String, dynamic>> _getPayload() async {
     final prefs = await SharedPreferences.getInstance();
@@ -69,7 +70,7 @@ class AppDrawer extends StatelessWidget {
                   );
                 },
               ),
-              if (isAdmin || isSuper) // <-- Only show for admin/superuser
+              if (isAdmin || isSuper)
                 ListTile(
                   leading: const Icon(Icons.settings),
                   title: const Text('Settings'),
@@ -100,11 +101,13 @@ class AppDrawer extends StatelessWidget {
               ),
               ListTile(
                 leading: const Icon(Icons.bolt),
-                title: const Text('ChatBot - Coming Soon!'),
+                title: const Text('ChatBot'),
                 onTap: () {
-                  Navigator.pushReplacement(
+                  Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => ChatBotPage()),
+                    MaterialPageRoute(
+                      builder: (context) => ChatBotPage(orders: orders),
+                    ),
                   );
                 },
               ),

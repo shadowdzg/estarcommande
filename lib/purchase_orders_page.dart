@@ -1,4 +1,3 @@
-import 'package:EstStarCommande/Chatbot.dart';
 import 'package:EstStarCommande/app_drawer.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -7,8 +6,6 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'login_page.dart';
-import 'SalesStatsPage.dart';
-import 'package:EstStarCommande/profile_page.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_typeahead/flutter_typeahead.dart';
@@ -18,9 +15,8 @@ import 'package:flutter/foundation.dart'
 import 'package:url_launcher/url_launcher.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/services.dart'; // For Clipboard
-import 'package:excel/excel.dart';
+import 'package:excel/excel.dart' as excel;
 import 'package:path/path.dart' as p;
-import 'settings.dart';
 
 bool sortAscending = true;
 String sortColumn = 'date';
@@ -33,7 +29,6 @@ bool _isMobileMenuOpen = false;
 bool isDropdownOpened = false;
 String selectedCrClientName = "";
 Map<String, String> CreateClientsMap = {};
-final TextEditingController _extraInfoController = TextEditingController();
 
 enum UserRole { admin, superuser, commercial, user, delegue }
 
@@ -89,60 +84,78 @@ class PurchaseOrdersPage extends StatefulWidget {
 class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   final _formKey = GlobalKey<FormState>();
 
-  Future<void> fetchPurchaseOrders() async {
+  int _totalOrdersCount = 0;
+  List<Map<String, dynamic>> _currentPageOrders = [];
+  String _whatsappNumber = "213770940827"; // Default WhatsApp number
+
+  Future<void> fetchPurchaseOrders({
+    int page = 0,
+    int pageSize = 10,
+    bool keepPage = true, // Add this parameter
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
-    print('mzlt nmchi');
-    final response = await http.get(
-      Uri.parse('http://92.222.248.113:3000/api/v1/commands'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
-    if (response.statusCode == 200) {
-      final List<dynamic> data = json.decode(response.body);
-      setState(() {
-        allOrders = data.map<Map<String, dynamic>>((item) {
-          return {
-            'id': item['id'],
-            'client': item['client']['clientName'] ?? 'Unknown',
-            'product': item['operator'] ?? 'Unknown',
-            'quantity': item['amount'] ?? 0,
-            'prixPercent':
-                double.tryParse(
-                  (item['pourcentage'] ?? '0').replaceAll('%', ''),
-                ) ??
-                0,
-            'state': item['isValidated'] ?? 'En Attente',
-            'name': item['user']['username'] ?? 'Unknown',
-            'number': item['number'] ?? 'Unknown',
-            'accepted': item['accepted'] ?? 'Unknown',
-            'acceptedBy': item['acceptedBy'] ?? ' ',
-            'date': item['createdAt'] ?? '',
-          };
-        }).toList();
-      });
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to fetch orders: ${response.statusCode}'),
-        ),
+
+    // Keep current page if requested
+    final int skip = keepPage ? page * pageSize : 0;
+    final int take = pageSize;
+
+    final Map<String, String> queryParams = {
+      'skip': skip.toString(),
+      'take': take.toString(),
+    };
+
+    final uri = Uri.parse(
+      'http://92.222.248.113:3000/api/v1/commands',
+    ).replace(queryParameters: queryParams);
+
+    try {
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
       );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        if (!mounted) return;
+
+        setState(() {
+          final ordersList = (data['data'] ?? []) as List<dynamic>;
+          _currentPageOrders = ordersList.map<Map<String, dynamic>>((item) {
+            return {
+              'id': item['id'],
+              'client': item['client']?['clientName'] ?? 'Unknown',
+              'product': item['operator'] ?? 'Unknown',
+              'quantity': item['amount'] ?? 0,
+              'prixPercent':
+                  double.tryParse(
+                    (item['pourcentage'] ?? '0').toString().replaceAll('%', ''),
+                  ) ??
+                  0,
+              'state': item['isValidated'] ?? 'En Attente',
+              'name': item['user']?['username'] ?? 'Unknown',
+              'number': item['number'] ?? 'Unknown',
+              'accepted': item['accepted'] ?? 'Unknown',
+              'acceptedBy': item['acceptedBy'] ?? ' ',
+              'date': item['createdAt'] ?? '',
+            };
+          }).toList();
+          _totalOrdersCount = data['totalCount'] ?? _currentPageOrders.length;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error fetching orders: $e')));
     }
   }
 
-  List<Map<String, dynamic>> allOrders = [
-    {
-      'client': 'YOUCEF',
-      'product': 'MOBTASIM',
-      'quantity': 1000,
-      'prixPercent': 100,
-      'state': 'Effectué',
-      'name': 'Aymen',
-      'date': '2025-06-03',
-    },
-  ];
+  // Deprecated: allOrders is not used for paginated backend data anymore.
+  List<Map<String, dynamic>> allOrders = [];
 
   String searchQuery = '';
   String productQuery = '';
@@ -191,6 +204,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   void initState() {
     super.initState();
     initializeProductCheckboxes(); // Initialize checkboxes
+    _loadWhatsAppNumber(); // Load saved WhatsApp number
     fetchPurchaseOrders();
     _startAutoRefresh();
     _checkAdmin();
@@ -198,8 +212,25 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     _checkClient();
   }
 
+  // Load WhatsApp number from SharedPreferences
+  Future<void> _loadWhatsAppNumber() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedNumber = prefs.getString('whatsapp_number');
+    if (savedNumber != null && savedNumber.isNotEmpty) {
+      setState(() {
+        _whatsappNumber = savedNumber;
+      });
+    }
+  }
+
+  // Save WhatsApp number to SharedPreferences
+  Future<void> _saveWhatsAppNumber(String number) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('whatsapp_number', number);
+  }
+
   List<Map<String, dynamic>> get filteredOrders {
-    final filtered = allOrders.where((order) {
+    final filtered = _currentPageOrders.where((order) {
       final clientMatch = order['client'].toLowerCase().contains(
         searchQuery.toLowerCase(),
       );
@@ -236,8 +267,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   }
 
   void exportToExcel(List<Map<String, dynamic>> data) async {
-    var excel = Excel.createExcel();
-    final Sheet sheet = excel['Sheet1'];
+    var excelFile = excel.Excel.createExcel();
+    final excel.Sheet sheet = excelFile['Sheet1'];
     List<String> headers = [
       'ID',
       'Client',
@@ -268,7 +299,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       ];
       sheet.appendRow(row);
     }
-    final fileBytes = excel.save();
+    final fileBytes = excelFile.save();
     if (fileBytes == null) {
       ScaffoldMessenger.of(
         context,
@@ -277,7 +308,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     }
     final dir = await getApplicationDocumentsDirectory();
     final path = p.join(dir.path, 'export.xlsx');
-    final file = File(path)
+    File(path)
       ..createSync(recursive: true)
       ..writeAsBytesSync(fileBytes);
     // Show success message and open the file
@@ -289,34 +320,40 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   }
 
   void _deleteOrder(int index) async {
-    final orderId = allOrders[index]['id'];
+    final orderId = _currentPageOrders[index]['id'];
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
-    final response = await http.delete(
-      Uri.parse('http://92.222.248.113:3000/api/v1/commands/$orderId'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
-    if (response.statusCode == 200 || response.statusCode == 204) {
-      setState(() {
-        allOrders.removeAt(index);
-      });
+
+    try {
+      final response = await http.delete(
+        Uri.parse('http://92.222.248.113:3000/api/v1/commands/$orderId'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        await fetchPurchaseOrders(
+          page: _currentPage,
+          pageSize: _rowsPerPage,
+          keepPage: true,
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Order deleted successfully')),
+        );
+      } else {
+        throw Exception('Failed to delete order: ${response.statusCode}');
+      }
+    } catch (e) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Order deleted successfully')));
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to delete order: ${response.statusCode}'),
-        ),
-      );
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
   Future<void> _confirmDeleteOrder(int realIndex) async {
-    final orderName = allOrders[realIndex]['name'] ?? 'this item';
+    final orderName = _currentPageOrders[realIndex]['name'] ?? 'this item';
     final bool? confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -349,7 +386,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   }
 
   void _changeOrderState(int index, String newState) async {
-    final orderId = allOrders[index]['id'].toString();
+    final orderId = _currentPageOrders[index]['id'].toString();
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
     final url = Uri.parse(
@@ -365,9 +402,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         body: jsonEncode({'isValidated': newState}),
       );
       if (response.statusCode == 200) {
-        setState(() {
-          allOrders[index]['state'] = newState;
-        });
+        await fetchPurchaseOrders(
+          page: _currentPage,
+          pageSize: _rowsPerPage,
+          keepPage: true,
+        );
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Order state updated successfully')),
         );
@@ -386,7 +425,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   }
 
   Future<void> handleAccept(bool accepted, int id) async {
-    final orderId = allOrders[id]['id'].toString();
+    final orderId = _currentPageOrders[id]['id'].toString();
     final url = Uri.parse(
       'http://92.222.248.113:3000/api/v1/commands/accept/$orderId',
     );
@@ -414,7 +453,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   }
 
   void _showEditDialog(int index) {
-    final order = allOrders[index];
+    final order = _currentPageOrders[index];
     final clientController = TextEditingController(text: order['client'] ?? '');
     final productController = TextEditingController(
       text: order['product'] ?? '',
@@ -503,11 +542,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
   void _showAddOrderDialog() {
     final clientController = TextEditingController();
-    final productController = TextEditingController();
     final numberController = TextEditingController();
     final prixPercentController = TextEditingController();
-    final nameController = TextEditingController();
-    final dateController = TextEditingController();
     Map<String, String> clientsMap = {};
     String? selectedClientName;
 
@@ -729,18 +765,12 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
                   if (response.statusCode == 201 ||
                       response.statusCode == 200) {
-                    setState(() {
-                      allOrders.add({
-                        'client': clientController.text,
-                        'product': product,
-                        'quantity': quantity,
-                        'prixPercent':
-                            double.tryParse(prixPercentController.text) ?? 0,
-                        'state': 'En Attente',
-                        'name': nameController.text,
-                        'date': DateTime.now().toIso8601String(),
-                      });
-                    });
+                    // Refresh the current page orders instead of modifying local state
+                    await fetchPurchaseOrders(
+                      page: _currentPage,
+                      pageSize: _rowsPerPage,
+                      keepPage: true,
+                    );
                   }
                 }
 
@@ -765,7 +795,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   void _updateOrder(int index, Map<String, dynamic> updatedOrder) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
-    final orderId = allOrders[index]['id'];
+    final orderId = _currentPageOrders[index]['id'];
     final Map<String, dynamic> body = {};
     if (updatedOrder['product'] != null) {
       body['operator'] = updatedOrder['product'];
@@ -791,9 +821,12 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       body: json.encode(body),
     );
     if (response.statusCode == 200) {
-      setState(() {
-        allOrders[index] = updatedOrder;
-      });
+      // Refresh the current page orders instead of modifying local state
+      await fetchPurchaseOrders(
+        page: _currentPage,
+        pageSize: _rowsPerPage,
+        keepPage: true,
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Order updated successfully')),
       );
@@ -1023,6 +1056,13 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     }
   }
 
+  // Add this to your _PurchaseOrdersPageState class
+  int findOrderIndexById(String id) {
+    return _currentPageOrders.indexWhere(
+      (order) => order['id'].toString() == id.toString(),
+    );
+  }
+
   void _checkAdmin() async {
     isAdminn = await isAdmin();
     setState(() {});
@@ -1038,29 +1078,212 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     setState(() {});
   }
 
+  void _showWhatsAppConfigDialog() {
+    final controller = TextEditingController(text: _whatsappNumber);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.settings, color: Colors.blue.shade600),
+            const SizedBox(width: 8),
+            const Text('Configuration WhatsApp'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: controller,
+              decoration: InputDecoration(
+                labelText: 'Numéro WhatsApp',
+                hintText: '213770940827',
+                prefixIcon: const Icon(Icons.phone),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+              ),
+              keyboardType: TextInputType.phone,
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: Colors.blue.shade600,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Format requis:',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Code pays + numéro (ex: 213770940827)\nPas d\'espaces ni de caractères spéciaux',
+                    style: TextStyle(fontSize: 12, color: Colors.black87),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              final newNumber = controller.text.trim();
+              if (newNumber.isNotEmpty) {
+                setState(() {
+                  _whatsappNumber = newNumber;
+                });
+                await _saveWhatsAppNumber(newNumber);
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Text('Numéro WhatsApp mis à jour: $newNumber'),
+                      ],
+                    ),
+                    backgroundColor: Colors.green.shade600,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Row(
+                      children: [
+                        Icon(Icons.error, color: Colors.white),
+                        SizedBox(width: 8),
+                        Text('Veuillez entrer un numéro valide'),
+                      ],
+                    ),
+                    backgroundColor: Colors.red.shade600,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.save),
+            label: const Text('Sauvegarder'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue.shade600,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Timer? _refreshTimer;
 
   void _startAutoRefresh() {
-    _refreshTimer = Timer.periodic(Duration(seconds: 5), (timer) {
-      fetchPurchaseOrders();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      fetchPurchaseOrders(
+        page: _currentPage,
+        pageSize: _rowsPerPage,
+        keepPage: true,
+      );
     });
   }
 
   void _sendOrderToWhatsApp(Map<String, dynamic> order) async {
-    String phoneNumber = "213770940827";
+    // Create a detailed and professional message
     String message =
-        "Nouvelle Commande:\n"
-        "Client: ${order['client']}\n"
-        "Product: ${order['product']}\n"
-        "Quantity: ${order['quantity']}\n"
-        "Number: ${order['number']}";
-    String urlEncodedMessage = Uri.encodeComponent(message);
-    String whatsappUrl = "http://wa.me/$phoneNumber/?text=$urlEncodedMessage";
-    if (await canLaunch(whatsappUrl)) {
-      await launch(whatsappUrl);
-    } else {
+        """
+🔔 *NOUVELLE COMMANDE EST STAR* 🔔
+
+📋 *Détails de la commande:*
+• Client: ${order['client']}
+• Produit: ${order['product']}
+• Quantité: ${order['quantity']}
+• Prix %: ${order['prixPercent']}%
+• Numéro: ${order['number']}
+• État: ${order['state']}
+• Créé par: ${order['name']}
+• Date: ${DateFormat('dd/MM/yyyy à HH:mm').format(DateTime.parse(order['date']))}
+
+💼 EST STAR - Gestion des Commandes
+""";
+
+    String urlEncodedMessage = Uri.encodeComponent(message.trim());
+    String whatsappUrl =
+        "https://wa.me/$_whatsappNumber/?text=$urlEncodedMessage";
+
+    try {
+      final uri = Uri.parse(whatsappUrl);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        // Show success feedback
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 8),
+                Text('Commande envoyée vers WhatsApp ($_whatsappNumber)'),
+              ],
+            ),
+            backgroundColor: Colors.green.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      } else {
+        throw Exception('Impossible de lancer WhatsApp');
+      }
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not launch WhatsApp. Is it installed?')),
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error, color: Colors.white),
+              const SizedBox(width: 8),
+              const Text('Impossible d\'ouvrir WhatsApp. Est-il installé?'),
+            ],
+          ),
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'Configurer',
+            textColor: Colors.white,
+            onPressed: _showWhatsAppConfigDialog,
+          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
       );
     }
   }
@@ -1068,17 +1291,13 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   int _currentPage = 0;
   final int _rowsPerPage = 10;
 
-  List get paginatedOrders {
-    final startIndex = _currentPage * _rowsPerPage;
-    final endIndex = (startIndex + _rowsPerPage).clamp(
-      0,
-      filteredOrders.length,
-    );
-    return filteredOrders.sublist(startIndex, endIndex);
+  List<Map<String, dynamic>> get paginatedOrders {
+    // Since backend already paginates, just return filteredOrders (which is _currentPageOrders filtered)
+    return filteredOrders;
   }
 
   Widget _buildPaginationControls() {
-    final totalPages = (filteredOrders.length / _rowsPerPage).ceil();
+    final totalPages = (_totalOrdersCount / _rowsPerPage).ceil();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
@@ -1087,14 +1306,30 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           IconButton(
             icon: const Icon(Icons.arrow_back_ios),
             onPressed: _currentPage > 0
-                ? () => setState(() => _currentPage--)
+                ? () async {
+                    setState(() {
+                      _currentPage--;
+                    });
+                    await fetchPurchaseOrders(
+                      page: _currentPage,
+                      pageSize: _rowsPerPage,
+                    );
+                  }
                 : null,
           ),
           Text('Page ${_currentPage + 1} of $totalPages'),
           IconButton(
             icon: const Icon(Icons.arrow_forward_ios),
             onPressed: (_currentPage + 1) < totalPages
-                ? () => setState(() => _currentPage++)
+                ? () async {
+                    setState(() {
+                      _currentPage++;
+                    });
+                    await fetchPurchaseOrders(
+                      page: _currentPage,
+                      pageSize: _rowsPerPage,
+                    );
+                  }
                 : null,
           ),
         ],
@@ -1110,11 +1345,14 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 1,
         leading: Builder(
           builder: (BuildContext context) {
             return IconButton(
-              icon: const Icon(Icons.menu),
+              icon: Icon(Icons.menu, color: Colors.red.shade700),
               onPressed: () {
                 Scaffold.of(context).openDrawer();
               },
@@ -1122,167 +1360,289 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           },
         ),
         centerTitle: true,
-        title: const Text('Commandes EST STAR'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset('assets/images/my_logo.png', height: 32, width: 32),
+            const SizedBox(width: 8),
+            Text(
+              'Commandes EST STAR',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.red.shade700,
+              ),
+            ),
+          ],
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
-            onPressed: () async {
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.remove('auth_token'); // <-- This removes the token
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginPage()),
-              );
-            },
+          if (isAdminn || isSuserr)
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: IconButton(
+                icon: Icon(
+                  FontAwesomeIcons.whatsapp,
+                  color: Colors.green.shade600,
+                  size: 20,
+                ),
+                tooltip: 'Configuration WhatsApp: $_whatsappNumber',
+                onPressed: _showWhatsAppConfigDialog,
+              ),
+            ),
+          Container(
+            margin: const EdgeInsets.only(right: 16),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: IconButton(
+              icon: Icon(Icons.logout, color: Colors.red.shade700),
+              tooltip: 'Déconnexion',
+              onPressed: () async {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.remove('auth_token');
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                );
+              },
+            ),
           ),
         ],
       ),
-      drawer: const AppDrawer(), // <-- Use the new shared drawer here
+      drawer: AppDrawer(
+        orders: _currentPageOrders,
+      ), // <-- Use the new shared drawer here
       body: Column(
         children: [
           LayoutBuilder(
             builder: (context, constraints) {
               if (constraints.maxWidth > 1400) {
-                return Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      SizedBox(
-                        width: 200,
-                        child: TextField(
-                          decoration: const InputDecoration(
-                            labelText: 'Search by client',
-                            border: OutlineInputBorder(),
-                          ),
-                          onChanged: (val) => setState(() => searchQuery = val),
+                return Card(
+                  margin: const EdgeInsets.all(16.0),
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      children: [
+                        // Header Row
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.filter_list,
+                              color: Colors.blue.shade600,
+                              size: 28,
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Filtres et Actions',
+                              style: Theme.of(context).textTheme.headlineSmall
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                            const Spacer(),
+                            Image.asset(
+                              'assets/images/my_logo.png',
+                              fit: BoxFit.contain,
+                              width: 60,
+                              height: 60,
+                            ),
+                          ],
                         ),
-                      ),
-                      Image.asset(
-                        'assets/images/my_logo.png',
-                        fit: BoxFit.contain,
-                        width: 50,
-                        height: 50,
-                      ),
-
-                      buildProductFilter(),
-                      const SizedBox(width: 8),
-                      DropdownButton<String>(
-                        value: selectedState,
-                        hint: const Text("Filter by State"),
-                        items:
-                            [
-                                  'En Attente',
-                                  'Effectué',
-                                  'Rejeté',
-                                  'Numéro Incorrecte',
-                                  'Problème Solde',
-                                ]
-                                .map(
-                                  (state) => DropdownMenuItem(
-                                    value: state,
-                                    child: Text(state),
+                        const SizedBox(height: 20),
+                        // Filters Row
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: TextField(
+                                decoration: InputDecoration(
+                                  labelText: 'Rechercher par client',
+                                  prefixIcon: const Icon(Icons.search),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                                )
-                                .toList(),
-                        onChanged: (value) =>
-                            setState(() => selectedState = value),
-                      ),
-                      const SizedBox(width: 8),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        alignment: WrapAlignment.start,
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: () async {
-                              final picked = await showDateRangePicker(
-                                context: context,
-                                firstDate: DateTime(2020),
-                                lastDate: DateTime(2100),
-                              );
-                              if (picked != null) {
-                                setState(() => selectedDateRange = picked);
-                              }
-                            },
-                            icon: Icon(Icons.date_range),
-                            label: Text('Date Filter'),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 14,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                                  filled: true,
+                                  fillColor: Colors.grey.shade50,
+                                ),
+                                onChanged: (val) =>
+                                    setState(() => searchQuery = val),
                               ),
                             ),
-                          ),
-                          ElevatedButton.icon(
-                            onPressed: _showAddOrderDialog,
-                            icon: Icon(Icons.add),
-                            label: Text('Add PO'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 14,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              setState(() {
-                                searchQuery = '';
-                                selectedDateRange = null;
-                                selectedState = null;
-                              });
-                            },
-                            icon: Icon(Icons.refresh),
-                            label: Text('Reset Filters'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 14,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              flex: 2,
+                              child: Container(
+                                height: 56,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: Colors.grey.shade300,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Center(child: buildProductFilter()),
                               ),
                             ),
-                          ),
-                          ElevatedButton.icon(
-                            onPressed: () => exportToExcel(allOrders),
-                            icon: Icon(Icons.download),
-                            label: Text('Export CSV'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blueGrey,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 14,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              flex: 2,
+                              child: Container(
+                                height: 56,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: Colors.grey.shade300,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Center(
+                                  child: DropdownButton<String>(
+                                    value: selectedState,
+                                    hint: const Text("Filtrer par État"),
+                                    underline: Container(),
+                                    isExpanded: true,
+                                    items:
+                                        [
+                                              'En Attente',
+                                              'Effectué',
+                                              'Rejeté',
+                                              'Numéro Incorrecte',
+                                              'Problème Solde',
+                                            ]
+                                            .map(
+                                              (state) => DropdownMenuItem(
+                                                value: state,
+                                                child: Text(state),
+                                              ),
+                                            )
+                                            .toList(),
+                                    onChanged: (value) =>
+                                        setState(() => selectedState = value),
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                          isAdminn || isSuserr
-                              ? ElevatedButton.icon(
-                                  icon: Icon(Icons.person_add),
-                                  label: Text('Create User'),
-                                  onPressed: () =>
-                                      _showCreateUserDialog(context),
-                                )
-                              : SizedBox(),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        // Action Buttons
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: () async {
+                                final picked = await showDateRangePicker(
+                                  context: context,
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime(2100),
+                                );
+                                if (picked != null) {
+                                  setState(() => selectedDateRange = picked);
+                                }
+                              },
+                              icon: const Icon(Icons.date_range, size: 18),
+                              label: const Text('Filtre Date'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue.shade600,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: _showAddOrderDialog,
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Ajouter Commande'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green.shade600,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  searchQuery = '';
+                                  selectedDateRange = null;
+                                  selectedState = null;
+                                });
+                              },
+                              icon: const Icon(Icons.refresh, size: 18),
+                              label: const Text('Réinitialiser'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orange.shade600,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () =>
+                                  exportToExcel(_currentPageOrders),
+                              icon: const Icon(Icons.download, size: 18),
+                              label: const Text('Exporter Excel'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.teal.shade600,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                            if (isAdminn || isSuserr)
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.person_add, size: 18),
+                                label: const Text('Créer Utilisateur'),
+                                onPressed: () => _showCreateUserDialog(context),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.purple.shade600,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 );
               } else {
@@ -1321,11 +1681,13 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 16),
                       SizedBox(
-                        width: 200,
+                        width: double.infinity,
                         child: TextField(
                           decoration: const InputDecoration(
-                            labelText: 'Search by client',
+                            labelText: 'Rechercher par client',
+                            prefixIcon: Icon(Icons.search),
                             border: OutlineInputBorder(),
                           ),
                           onChanged: (val) => setState(() => searchQuery = val),
@@ -1333,129 +1695,175 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                       ),
                       AnimatedCrossFade(
                         firstChild: Container(height: 0),
-                        secondChild: Column(
-                          children: [
-                            Row(
+                        secondChild: Card(
+                          margin: const EdgeInsets.symmetric(vertical: 16),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
                               children: [
-                                buildProductFilter(),
-                                DropdownButton<String>(
-                                  value: selectedState,
-                                  hint: const Text("Filter by State"),
-                                  items:
-                                      [
-                                            'En Attente',
-                                            'Effectué',
-                                            'Rejeté',
-                                            'Numéro Incorrecte',
-                                            'Problème Solde',
-                                          ]
-                                          .map(
-                                            (state) => DropdownMenuItem(
-                                              value: state,
-                                              child: Text(state),
-                                            ),
-                                          )
-                                          .toList(),
-                                  onChanged: (value) =>
-                                      setState(() => selectedState = value),
+                                Row(
+                                  children: [
+                                    Expanded(child: buildProductFilter()),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: DropdownButton<String>(
+                                        value: selectedState,
+                                        hint: const Text("Filtrer État"),
+                                        isExpanded: true,
+                                        items:
+                                            [
+                                                  'En Attente',
+                                                  'Effectué',
+                                                  'Rejeté',
+                                                  'Numéro Incorrecte',
+                                                  'Problème Solde',
+                                                ]
+                                                .map(
+                                                  (state) => DropdownMenuItem(
+                                                    value: state,
+                                                    child: Text(state),
+                                                  ),
+                                                )
+                                                .toList(),
+                                        onChanged: (value) => setState(
+                                          () => selectedState = value,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              alignment: WrapAlignment.start,
-                              children: [
-                                ElevatedButton.icon(
-                                  onPressed: () async {
-                                    final picked = await showDateRangePicker(
-                                      context: context,
-                                      firstDate: DateTime(2020),
-                                      lastDate: DateTime(2100),
-                                    );
-                                    if (picked != null) {
-                                      setState(
-                                        () => selectedDateRange = picked,
-                                      );
-                                    }
-                                  },
-                                  icon: Icon(Icons.date_range),
-                                  label: Text('Date Filter'),
-                                  style: ElevatedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                      vertical: 14,
+                                const SizedBox(height: 16),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  alignment: WrapAlignment.center,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: () async {
+                                        final picked =
+                                            await showDateRangePicker(
+                                              context: context,
+                                              firstDate: DateTime(2020),
+                                              lastDate: DateTime(2100),
+                                            );
+                                        if (picked != null) {
+                                          setState(
+                                            () => selectedDateRange = picked,
+                                          );
+                                        }
+                                      },
+                                      icon: const Icon(
+                                        Icons.date_range,
+                                        size: 16,
+                                      ),
+                                      label: const Text('Date'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.blue.shade600,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 8,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                    ElevatedButton.icon(
+                                      onPressed: _showAddOrderDialog,
+                                      icon: const Icon(Icons.add, size: 16),
+                                      label: const Text('Ajouter'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green.shade600,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 8,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ),
-                                ElevatedButton.icon(
-                                  onPressed: _showAddOrderDialog,
-                                  icon: Icon(Icons.add),
-                                  label: Text('Ajouter Commande'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.green,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                      vertical: 14,
+                                    ElevatedButton.icon(
+                                      onPressed: () {
+                                        setState(() {
+                                          searchQuery = '';
+                                          selectedDateRange = null;
+                                          selectedState = null;
+                                        });
+                                      },
+                                      icon: const Icon(Icons.refresh, size: 16),
+                                      label: const Text('Reset'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.orange.shade600,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 8,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                    ElevatedButton.icon(
+                                      onPressed: () =>
+                                          exportToExcel(_currentPageOrders),
+                                      icon: const Icon(
+                                        Icons.download,
+                                        size: 16,
+                                      ),
+                                      label: const Text('Excel'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.teal.shade600,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 8,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ),
-                                ElevatedButton.icon(
-                                  onPressed: () {
-                                    setState(() {
-                                      searchQuery = '';
-                                      selectedDateRange = null;
-                                      selectedState = null;
-                                    });
-                                  },
-                                  icon: Icon(Icons.refresh),
-                                  label: Text('Reset Filters'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.orange,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                      vertical: 14,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                ),
-                                ElevatedButton.icon(
-                                  onPressed: () => exportToExcel(allOrders),
-                                  icon: Icon(Icons.download),
-                                  label: Text('Export CSV'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.blueGrey,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                      vertical: 14,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                ),
-                                isAdminn || isSuserr
-                                    ? ElevatedButton.icon(
-                                        icon: Icon(Icons.person_add),
-                                        label: Text('Create User'),
+                                    if (isAdminn || isSuserr)
+                                      ElevatedButton.icon(
+                                        icon: const Icon(
+                                          Icons.person_add,
+                                          size: 16,
+                                        ),
+                                        label: const Text('Utilisateur'),
                                         onPressed: () =>
                                             _showCreateUserDialog(context),
-                                      )
-                                    : SizedBox(),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              Colors.purple.shade600,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ],
                             ),
-                          ],
+                          ),
                         ),
                         crossFadeState: _isMobileMenuOpen
                             ? CrossFadeState.showSecond
@@ -1479,7 +1887,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                           itemCount: paginatedOrders.length,
                           itemBuilder: (context, index) {
                             final order = paginatedOrders[index];
-                            final realIndex = allOrders.indexOf(order);
+                            final realIndex = index;
                             final price =
                                 10000 - (order['prixPercent'] / 100 * 10000);
 
@@ -1726,7 +2134,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                               index,
                             ) {
                               final order = paginatedOrders[index];
-                              final realIndex = allOrders.indexOf(order);
+                              final realIndex = index;
                               final calcPrice =
                                   10000 - (order['prixPercent'] / 100 * 10000);
 
@@ -1965,173 +2373,134 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   }
 
   Widget buildProductFilter() {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 28),
-          ElevatedButton(
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) {
-                  TextEditingController searchController =
-                      TextEditingController();
-                  List<String> filteredProducts = productCheckboxes.keys
-                      .toList();
-                  return StatefulBuilder(
-                    builder: (context, setStateDialog) {
-                      void filterSearch(String query) {
-                        setStateDialog(() {
-                          filteredProducts = productCheckboxes.keys
-                              .where(
-                                (product) => product.toLowerCase().contains(
-                                  query.toLowerCase(),
-                                ),
-                              )
-                              .toList();
-                        });
-                      }
+    return ElevatedButton(
+      onPressed: () {
+        showDialog(
+          context: context,
+          builder: (context) {
+            TextEditingController searchController = TextEditingController();
+            List<String> filteredProducts = productCheckboxes.keys.toList();
+            return StatefulBuilder(
+              builder: (context, setStateDialog) {
+                void filterSearch(String query) {
+                  setStateDialog(() {
+                    filteredProducts = productCheckboxes.keys
+                        .where(
+                          (product) => product.toLowerCase().contains(
+                            query.toLowerCase(),
+                          ),
+                        )
+                        .toList();
+                  });
+                }
 
-                      return Dialog(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Container(
-                          width: 400,
-                          height: 500,
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            children: [
-                              Text(
-                                'Select Products',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              TextField(
-                                controller: searchController,
-                                onChanged: filterSearch,
-                                decoration: InputDecoration(
-                                  hintText: 'Search products...',
-                                  prefixIcon: Icon(Icons.search),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  contentPadding: EdgeInsets.symmetric(
-                                    vertical: 0,
-                                    horizontal: 12,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              Expanded(
-                                child: GridView.count(
-                                  crossAxisCount: 3,
-                                  crossAxisSpacing: 8,
-                                  mainAxisSpacing: 8,
-                                  children: filteredProducts.map((product) {
-                                    return CheckboxListTile(
-                                      title: Text(
-                                        product,
-                                        style: TextStyle(fontSize: 12),
-                                      ),
-                                      value: productCheckboxes[product],
-                                      onChanged: (value) {
-                                        setState(() {
-                                          productCheckboxes[product] = value!;
-                                        });
-                                        setStateDialog(() {});
-                                      },
-                                      controlAffinity:
-                                          ListTileControlAffinity.leading,
-                                      dense: true,
-                                      contentPadding: EdgeInsets.symmetric(
-                                        horizontal: 4,
-                                      ),
-                                    );
-                                  }).toList(),
-                                ),
-                              ),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  TextButton(
-                                    onPressed: () {
-                                      setState(() {
-                                        productCheckboxes.updateAll(
-                                          (key, value) => true,
-                                        );
-                                      });
-                                      setStateDialog(() {});
-                                      Navigator.pop(context);
-                                    },
-                                    child: Text('Select All'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () {
-                                      setState(() {
-                                        productCheckboxes = Map.fromIterable(
-                                          productCheckboxes.keys,
-                                          key: (k) => k,
-                                          value: (_) => false,
-                                        );
-                                      });
-                                      setStateDialog(() {});
-                                      Navigator.pop(context);
-                                    },
-                                    child: Text('UnSelect All'),
-                                  ),
-                                ],
-                              ),
-                            ],
+                return Dialog(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Container(
+                    width: 400,
+                    height: 500,
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Sélectionner Produits',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      );
-                    },
-                  );
-                },
-              );
-            },
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text("Select Products"),
-                const SizedBox(width: 8),
-                Icon(Icons.filter_list),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    productCheckboxes.updateAll((key, value) => true);
-                  });
-                },
-                child: const Text('Select All'),
-              ),
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    productCheckboxes = Map.fromIterable(
-                      productCheckboxes.keys,
-                      key: (k) => k,
-                      value: (_) => false,
-                    );
-                  });
-                },
-                child: const Text('Unselect All'),
-              ),
-            ],
-          ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: searchController,
+                          onChanged: filterSearch,
+                          decoration: InputDecoration(
+                            hintText: 'Rechercher produits...',
+                            prefixIcon: Icon(Icons.search),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            contentPadding: EdgeInsets.symmetric(
+                              vertical: 0,
+                              horizontal: 12,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Expanded(
+                          child: ListView.builder(
+                            itemCount: filteredProducts.length,
+                            itemBuilder: (context, index) {
+                              final product = filteredProducts[index];
+                              return CheckboxListTile(
+                                title: Text(
+                                  product,
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                                value: productCheckboxes[product],
+                                onChanged: (value) {
+                                  setState(() {
+                                    productCheckboxes[product] = value!;
+                                  });
+                                  setStateDialog(() {});
+                                },
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                dense: true,
+                              );
+                            },
+                          ),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  productCheckboxes.updateAll(
+                                    (key, value) => true,
+                                  );
+                                });
+                                setStateDialog(() {});
+                              },
+                              child: Text('Tout Sélectionner'),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  productCheckboxes.updateAll(
+                                    (key, value) => false,
+                                  );
+                                });
+                                setStateDialog(() {});
+                              },
+                              child: Text('Tout Désélectionner'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.blue.shade50,
+        foregroundColor: Colors.blue.shade700,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.filter_list, size: 18),
+          const SizedBox(width: 8),
+          Text("Filtrer Produits"),
         ],
       ),
     );

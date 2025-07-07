@@ -5,9 +5,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_selector/file_selector.dart';
 
-import 'purchase_orders_page.dart';
 import 'login_page.dart';
-import 'settings.dart';
 import 'app_drawer.dart';
 
 class SalesStatsPage extends StatefulWidget {
@@ -50,14 +48,51 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        final List<dynamic> data = json.decode(response.body);
         setState(() {
-          _zoneData = json.decode(response.body);
+          _zoneData = data;
         });
       } else {
         print('Failed to load data: ${response.statusCode}');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.warning, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text('Erreur lors du chargement des données'),
+                ],
+              ),
+              backgroundColor: Colors.orange.shade600,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        }
       }
     } catch (e) {
       print('Error fetching data: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Erreur de connexion'),
+              ],
+            ),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -119,13 +154,41 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         fetchZoneData();
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Upload successful')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 8),
+                Text(
+                  'Fichier ${isRecouvrementFile ? 'recouvrement' : 'objectif'} uploadé avec succès',
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Upload failed')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 8),
+                Text('Échec de l\'upload du fichier'),
+              ],
+            ),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
       }
     }
   }
@@ -135,8 +198,13 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
     final isNarrow = MediaQuery.of(context).size.width < 500;
 
     return Scaffold(
+      backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: const Text('Sales Stats'),
+        title: const Text(
+          'Statistiques des ventes',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        centerTitle: true,
         leading: Builder(
           builder: (BuildContext context) {
             return IconButton(
@@ -161,94 +229,220 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
           ),
         ],
       ),
-      drawer: const AppDrawer(), // <-- Use the shared drawer here
+      drawer: const AppDrawer(orders: []),
       body: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            Row(
-              children: [
-                Text(
-                  isRecouvrement ? 'Recouvrement View' : 'Objectif View',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const Spacer(),
-                Expanded(
-                  child: CupertinoSegmentedControl<bool>(
-                    groupValue: isRecouvrement,
-                    children: <bool, Widget>{
-                      true: Center(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.attach_money,
-                              size: 22,
-                              color: Colors.green,
-                            ),
-                            if (!isNarrow) ...[
-                              const SizedBox(width: 8),
-                              const Text('Recouvrement'),
-                            ],
-                          ],
+            // Header Card with Toggle
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          isRecouvrement ? Icons.monetization_on : Icons.flag,
+                          color: isRecouvrement
+                              ? Colors.green.shade600
+                              : Colors.blue.shade600,
+                          size: 28,
                         ),
-                      ),
-                      false: Center(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.flag,
-                              size: 22,
-                              color: Colors.blue,
-                            ),
-                            if (!isNarrow) ...[
-                              const SizedBox(width: 8),
-                              const Text('Objectif'),
-                            ],
-                          ],
+                        const SizedBox(width: 12),
+                        Text(
+                          isRecouvrement ? 'Vue Recouvrement' : 'Vue Objectif',
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    },
-                    onValueChanged: (val) {
-                      setState(() {
-                        isRecouvrement = val;
-                      });
-                    },
-                    selectedColor: Theme.of(context).colorScheme.primary,
-                    borderColor: Theme.of(context).colorScheme.primary,
-                    pressedColor: Theme.of(
-                      context,
-                    ).colorScheme.primary.withOpacity(0.2),
-                    unselectedColor: Colors.white,
+                      child: CupertinoSegmentedControl<bool>(
+                        groupValue: isRecouvrement,
+                        children: <bool, Widget>{
+                          true: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.monetization_on,
+                                  size: 20,
+                                  color: Colors.green,
+                                ),
+                                if (!isNarrow) ...[
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Recouvrement',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          false: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.flag,
+                                  size: 20,
+                                  color: Colors.blue,
+                                ),
+                                if (!isNarrow) ...[
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Objectif',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        },
+                        onValueChanged: (val) {
+                          setState(() {
+                            isRecouvrement = val;
+                          });
+                        },
+                        selectedColor: isRecouvrement
+                            ? Colors.green.shade600
+                            : Colors.blue.shade600,
+                        borderColor: Colors.grey.shade300,
+                        pressedColor:
+                            (isRecouvrement
+                                    ? Colors.green.shade600
+                                    : Colors.blue.shade600)
+                                .withOpacity(0.2),
+                        unselectedColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Upload buttons for admin/super users
+            if (isAdmin || isSuperUser) ...[
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.admin_panel_settings,
+                            color: Colors.orange.shade600,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Administration',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => uploadExcelFile(true),
+                              icon: const Icon(Icons.upload_file, size: 20),
+                              label: const Text('Upload Recouvrement'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green.shade600,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => uploadExcelFile(false),
+                              icon: const Icon(Icons.upload_file, size: 20),
+                              label: const Text('Upload Objectif'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue.shade600,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                if (isAdmin || isSuperUser) ...[
-                  ElevatedButton.icon(
-                    onPressed: () => uploadExcelFile(true),
-                    icon: const Icon(Icons.upload_file),
-                    label: const Text('Upload Recouvrement'),
-                  ),
-                  const SizedBox(width: 10),
-                  ElevatedButton.icon(
-                    onPressed: () => uploadExcelFile(false),
-                    icon: const Icon(Icons.upload_file),
-                    label: const Text('Upload Objectif'),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 20),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Stats List
             Expanded(
               child: _zoneData.isEmpty
-                  ? const Center(child: CircularProgressIndicator())
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.analytics,
+                            size: 64,
+                            color: Colors.grey.shade400,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Chargement des statistiques...',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          const CircularProgressIndicator(),
+                        ],
+                      ),
+                    )
                   : ListView.builder(
                       itemCount: _zoneData.length,
                       itemBuilder: (context, index) {
@@ -260,51 +454,110 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
                                   0.0;
 
                         return Card(
-                          margin: const EdgeInsets.symmetric(
-                            vertical: 8,
-                            horizontal: 4,
+                          margin: const EdgeInsets.symmetric(vertical: 6),
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          elevation: 3,
                           child: Padding(
-                            padding: const EdgeInsets.all(16.0),
+                            padding: const EdgeInsets.all(20.0),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  zone['name'] ?? 'Unnamed Zone',
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            (isRecouvrement
+                                                    ? Colors.green
+                                                    : Colors.blue)
+                                                .shade50,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Icon(
+                                        Icons.location_on,
+                                        color: isRecouvrement
+                                            ? Colors.green.shade600
+                                            : Colors.blue.shade600,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            zone['name'] ?? 'Zone sans nom',
+                                            style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'Délégué: ${zone['user']?['username'] ?? 'Non assigné'}',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _getPerformanceColor(
+                                          taux,
+                                        ).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: _getPerformanceColor(
+                                            taux,
+                                          ).withOpacity(0.3),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '${(taux * 100).toStringAsFixed(1)}%',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: _getPerformanceColor(taux),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Delegue: ${zone['user']?['username'] ?? ''}',
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                ),
-                                const SizedBox(height: 8),
+
+                                const SizedBox(height: 16),
+
                                 Text(
                                   isRecouvrement
                                       ? 'Recouvrement: ${zone['Recouv']} / ${zone['SFRecouv']}'
                                       : 'Ventes: ${zone['ventes']} / ${zone['ObjVentes']}',
-                                  style: const TextStyle(fontSize: 13),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
-                                const SizedBox(height: 6),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text('${(taux * 100).toStringAsFixed(1)}%'),
-                                    const SizedBox(width: 8),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                LinearProgressIndicator(
-                                  value: taux.clamp(0.0, 1.0),
-                                  minHeight: 8,
-                                  backgroundColor: Colors.grey.shade300,
-                                  color: isRecouvrement
-                                      ? Colors.green
-                                      : Colors.blue,
+
+                                const SizedBox(height: 12),
+
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: LinearProgressIndicator(
+                                    value: taux.clamp(0.0, 1.0),
+                                    minHeight: 8,
+                                    backgroundColor: Colors.grey.shade200,
+                                    color: _getPerformanceColor(taux),
+                                  ),
                                 ),
                               ],
                             ),
@@ -317,6 +570,12 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
         ),
       ),
     );
+  }
+
+  Color _getPerformanceColor(double percentage) {
+    if (percentage >= 0.8) return Colors.green.shade600;
+    if (percentage >= 0.6) return Colors.orange.shade600;
+    return Colors.red.shade600;
   }
 }
 
