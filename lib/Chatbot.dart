@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'app_drawer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class ChatBotPage extends StatefulWidget {
   final List<Map<String, dynamic>> orders;
@@ -84,10 +85,10 @@ class _ChatBotPageState extends State<ChatBotPage> {
       return;
     }
 
-    // Fetch a large number of orders for comprehensive analysis
+    // Fetch a limited number of recent orders for analysis
     final Map<String, String> queryParams = {
       'skip': '0',
-      'take': '10000', // Get up to 10,000 orders for analysis
+      'take': '1000', // Get only the last 1000 orders for analysis
     };
 
     final uri = Uri.parse(
@@ -115,6 +116,7 @@ class _ChatBotPageState extends State<ChatBotPage> {
               'client': item['client']?['clientName'] ?? 'Unknown',
               'product': item['operator'] ?? 'Unknown',
               'quantity': item['amount'] ?? 0,
+              'prix': double.tryParse(item['prix']?.toString() ?? '0') ?? 0.0,
               'prixPercent':
                   double.tryParse(
                     (item['pourcentage'] ?? '0').toString().replaceAll('%', ''),
@@ -201,7 +203,8 @@ class _ChatBotPageState extends State<ChatBotPage> {
         },
         {"role": "user", "content": prompt},
       ],
-      "max_tokens": 512,
+      "max_tokens": 2048, // Increased from 512 to allow for longer responses
+      "temperature": 0.7, // Added for more natural responses
     });
 
     final response = await http.post(url, headers: headers, body: body);
@@ -226,17 +229,39 @@ class _ChatBotPageState extends State<ChatBotPage> {
     double totalRevenue = 0;
 
     for (var order in allOrders) {
-      // Build detailed summary
-      double orderRevenue =
-          10000 -
-          (((order['prixPercent'] ?? 0) as num).toDouble() / 100 * 10000);
+      // Build detailed summary with null safety
+      double quantity = ((order['quantity'] ?? 0) as num).toDouble();
+      double prix = ((order['prix'] ?? 0) as num).toDouble();
+      double prixPercent = ((order['prixPercent'] ?? 0) as num).toDouble();
+      String state = order['state'] ?? 'غير معروف';
+      
+      // If prix is 0, try to calculate it from percentage (assuming base price of 10000)
+      if (prix == 0.0 && prixPercent > 0) {
+        prix = 10000 - (prixPercent / 100 * 10000);
+      }
+      
+      // Calculate revenue only for completed orders (effectué)
+      double orderRevenue = 0.0;
+      bool isCompleted = state.toLowerCase() == 'effectué' || 
+                        state.toLowerCase() == 'effectue' ||
+                        state.toLowerCase() == 'validé' ||
+                        state.toLowerCase() == 'valide' ||
+                        state.toLowerCase() == 'validated' ||
+                        state.toLowerCase() == 'completed' ||
+                        state.toLowerCase() == 'true' ||
+                        state == 'true' ||
+                        state == '1';
+      
+      if (isCompleted) {
+        orderRevenue = quantity * prix;
+      }
+      
       ordersSummary +=
-          "طلب: عميل=${order['client']}, منتج=${order['product']}, كمية=${order['quantity']}, حالة=${order['state']}, تاريخ=${order['date']}, إيراد=${orderRevenue.toStringAsFixed(2)}\n";
+          "طلب: عميل=${order['client']}, منتج=${order['product']}, كمية=${quantity}, سعر=${prix}, نسبة=${prixPercent}%, حالة=${state}, إيراد=${orderRevenue.toStringAsFixed(2)}\n";
 
       // Calculate statistics
       String client = order['client'] ?? 'غير معروف';
       String product = order['product'] ?? 'غير معروف';
-      String state = order['state'] ?? 'غير معروف';
 
       clientOrderCount[client] = (clientOrderCount[client] ?? 0) + 1;
       clientRevenue[client] = (clientRevenue[client] ?? 0) + orderRevenue;
@@ -246,11 +271,39 @@ class _ChatBotPageState extends State<ChatBotPage> {
     }
 
     // Generate statistics summary in Arabic
+    int completedOrders = allOrders.where((order) {
+      String state = order['state'] ?? '';
+      return state.toLowerCase() == 'effectué' || 
+             state.toLowerCase() == 'effectue' ||
+             state.toLowerCase() == 'validé' ||
+             state.toLowerCase() == 'valide' ||
+             state.toLowerCase() == 'validated' ||
+             state.toLowerCase() == 'completed' ||
+             state.toLowerCase() == 'true' ||
+             state == 'true' ||
+             state == '1';
+    }).length;
+    
+    // Find the date of the first order
+    String firstOrderDate = 'غير متاح';
+    if (allOrders.isNotEmpty) {
+      final sortedOrders = allOrders.toList()..sort((a, b) {
+        final aDate = a['date'] ?? '';
+        final bDate = b['date'] ?? '';
+        return aDate.compareTo(bDate);
+      });
+      firstOrderDate = sortedOrders.first['date'] ?? 'غير متاح';
+    }
+
     String statsSummary =
         """
-ملخص إحصائيات المبيعات:
+ملخص إحصائيات المبيعات (آخر 1000 طلب):
 - إجمالي الطلبات: ${allOrders.length}
-- إجمالي الإيرادات: ${totalRevenue.toStringAsFixed(2)} دج
+- الطلبات المكتملة: $completedOrders
+- الطلبات المعلقة: ${allOrders.length - completedOrders}
+- إجمالي الإيرادات (الطلبات المكتملة فقط): ${totalRevenue.toStringAsFixed(2)} دج
+- تاريخ أول طلب في هذا التحليل: $firstOrderDate
+- حالات الطلبات الموجودة: ${stateCount.entries.map((e) => '${e.key}: ${e.value}').join(', ')}
 - أفضل 5 عملاء حسب الطلبات: ${clientOrderCount.entries.toList()..sort((a, b) => b.value.compareTo(a.value))}
 - أفضل 5 عملاء حسب الإيرادات: ${clientRevenue.entries.toList()..sort((a, b) => b.value.compareTo(a.value))}
 - أفضل المنتجات: ${productCount.entries.toList()..sort((a, b) => b.value.compareTo(a.value))}
@@ -269,6 +322,8 @@ ${ordersSummary.length > 8000 ? ordersSummary.substring(0, 8000) + '...[مقطو
 سؤال المستخدم: $userQuery
 
 يرجى تقديم تحليل شامل باللغة العربية بناءً على البيانات أعلاه. اجعل إجابتك مهنية وتحليلية مع أرقام ونسب محددة حيثما أمكن.
+
+مهم: احتفظ بإجابتك قصيرة ومركزة في 3-4 فقرات فقط. لا تكتب أكثر من ذلك.
 """;
 
     _addMessage("🤖", "جاري التحليل...");
@@ -303,12 +358,35 @@ ${ordersSummary.length > 8000 ? ordersSummary.substring(0, 8000) + '...[مقطو
 
   double _calculateTotalRevenue() {
     double totalRevenue = 0;
+    
     for (var order in allOrders) {
-      double orderRevenue =
-          10000 -
-          (((order['prixPercent'] ?? 0) as num).toDouble() / 100 * 10000);
-      totalRevenue += orderRevenue;
+      double quantity = ((order['quantity'] ?? 0) as num).toDouble();
+      double prix = ((order['prix'] ?? 0) as num).toDouble();
+      double prixPercent = ((order['prixPercent'] ?? 0) as num).toDouble();
+      String state = order['state'] ?? '';
+      
+      // If prix is 0, try to calculate it from percentage (assuming base price of 10000)
+      if (prix == 0.0 && prixPercent > 0) {
+        prix = 10000 - (prixPercent / 100 * 10000);
+      }
+      
+      // Calculate revenue only for completed orders (effectué)
+      bool isCompleted = state.toLowerCase() == 'effectué' || 
+                        state.toLowerCase() == 'effectue' ||
+                        state.toLowerCase() == 'validé' ||
+                        state.toLowerCase() == 'valide' ||
+                        state.toLowerCase() == 'validated' ||
+                        state.toLowerCase() == 'completed' ||
+                        state.toLowerCase() == 'true' ||
+                        state == 'true' ||
+                        state == '1';
+      
+      if (isCompleted) {
+        double orderRevenue = quantity * prix;
+        totalRevenue += orderRevenue;
+      }
     }
+    
     return totalRevenue;
   }
 
@@ -329,13 +407,18 @@ ${ordersSummary.length > 8000 ? ordersSummary.substring(0, 8000) + '...[مقطو
       margin: const EdgeInsets.only(right: 8.0),
       child: ActionChip(
         avatar: Text(icon, style: const TextStyle(fontSize: 16)),
-        label: Text(title, style: const TextStyle(fontSize: 12)),
+        label: Text(
+          title,
+          style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w500),
+        ),
         onPressed: () {
           _controller.text = query;
           _handleSubmitted(query);
         },
-        backgroundColor: Colors.blue.shade50,
-        side: BorderSide(color: Colors.blue.shade200),
+        backgroundColor: Colors.white,
+        side: BorderSide(color: Colors.red.shade200),
+        elevation: 2,
+        shadowColor: Colors.red.withValues(alpha: 0.2),
       ),
     );
   }
@@ -350,9 +433,24 @@ ${ordersSummary.length > 8000 ? ordersSummary.substring(0, 8000) + '...[مقطو
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (isBot) ...[
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.blue.shade600,
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0xFFE57373), // Soft red
+                    Color(0xFFD32F2F), // Medium red
+                  ],
+                ),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.red.withValues(alpha: 0.3),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
               child: const Text('🤖', style: TextStyle(fontSize: 16)),
             ),
             const SizedBox(width: 8),
@@ -361,7 +459,15 @@ ${ordersSummary.length > 8000 ? ordersSummary.substring(0, 8000) + '...[مقطو
             child: Container(
               padding: const EdgeInsets.all(12.0),
               decoration: BoxDecoration(
-                color: isBot ? Colors.grey.shade100 : Colors.blue.shade500,
+                color: isBot ? Colors.grey.shade50 : null,
+                gradient: isBot
+                    ? null
+                    : const LinearGradient(
+                        colors: [
+                          Color(0xFFE57373), // Soft red
+                          Color(0xFFD32F2F), // Medium red
+                        ],
+                      ),
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
@@ -374,7 +480,7 @@ ${ordersSummary.length > 8000 ? ordersSummary.substring(0, 8000) + '...[مقطو
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withValues(alpha: 0.1),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),
@@ -385,7 +491,7 @@ ${ordersSummary.length > 8000 ? ordersSummary.substring(0, 8000) + '...[مقطو
                 children: [
                   Text(
                     message['sender']!,
-                    style: TextStyle(
+                    style: GoogleFonts.poppins(
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
                       color: isBot ? Colors.grey.shade600 : Colors.white70,
@@ -394,7 +500,7 @@ ${ordersSummary.length > 8000 ? ordersSummary.substring(0, 8000) + '...[مقطو
                   const SizedBox(height: 4),
                   SelectableText(
                     message['message']!,
-                    style: TextStyle(
+                    style: GoogleFonts.poppins(
                       color: isBot ? Colors.black87 : Colors.white,
                       fontSize: 14,
                       height: 1.4,
@@ -406,9 +512,19 @@ ${ordersSummary.length > 8000 ? ordersSummary.substring(0, 8000) + '...[مقطو
           ),
           if (!isBot) ...[
             const SizedBox(width: 8),
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.grey.shade600,
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade600,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withValues(alpha: 0.3),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
               child: const Text('👤', style: TextStyle(fontSize: 16)),
             ),
           ],
@@ -421,218 +537,339 @@ ${ordersSummary.length > 8000 ? ordersSummary.substring(0, 8000) + '...[مقطو
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('مساعد المبيعات'),
-        backgroundColor: Colors.blue.shade600,
-        foregroundColor: Colors.white,
-        elevation: 2,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_outlined),
-            onPressed: () async {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('جاري تحديث بيانات الطلبات...')),
-              );
-              await _fetchAllOrdersForAnalysis();
-            },
-            tooltip: 'تحديث الطلبات',
+        title: Text(
+          'مساعد المبيعات',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
           ),
-          IconButton(
-            icon: const Icon(Icons.clear_all),
-            onPressed: () {
-              setState(() {
-                _messages.clear();
-              });
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('تم مسح المحادثة')));
-            },
-            tooltip: 'مسح المحادثة',
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.topRight,
+              colors: [
+                Color(0xFFE57373), // Soft red
+                Color(0xFFD32F2F), // Medium red
+              ],
+            ),
+          ),
+        ),
+        foregroundColor: Colors.white,
+        actions: [
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.refresh_outlined),
+              onPressed: () async {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'جاري تحديث بيانات الطلبات...',
+                      style: GoogleFonts.poppins(),
+                    ),
+                    backgroundColor: Colors.green.shade600,
+                  ),
+                );
+                await _fetchAllOrdersForAnalysis();
+              },
+              tooltip: 'تحديث الطلبات',
+            ),
+          ),
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.clear_all),
+              onPressed: () {
+                setState(() {
+                  _messages.clear();
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'تم مسح المحادثة',
+                      style: GoogleFonts.poppins(),
+                    ),
+                    backgroundColor: Colors.blue.shade600,
+                  ),
+                );
+              },
+              tooltip: 'مسح المحادثة',
+            ),
           ),
         ],
       ),
       drawer: AppDrawer(orders: allOrders),
-      body: Column(
-        children: [
-          // Data summary header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16.0),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.blue.shade50, Colors.blue.shade100],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                Column(
-                  children: [
-                    Text(
-                      '${allOrders.length}',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: allOrders.isEmpty ? Colors.red : Colors.blue,
-                      ),
-                    ),
-                    Text(
-                      allOrders.isEmpty ? 'لا توجد طلبات' : 'إجمالي الطلبات',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  ],
-                ),
-                Column(
-                  children: [
-                    Text(
-                      allOrders.isEmpty
-                          ? 'غير متاح'
-                          : '${_calculateTotalRevenue().toStringAsFixed(0)} دج',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const Text(
-                      'إجمالي الإيرادات',
-                      style: TextStyle(fontSize: 10, color: Colors.grey),
-                    ),
-                  ],
-                ),
-                Column(
-                  children: [
-                    Icon(
-                      allOrders.isEmpty ? Icons.error_outline : Icons.analytics,
-                      color: allOrders.isEmpty ? Colors.red : Colors.blue,
-                      size: 32,
-                    ),
-                    if (allOrders.isEmpty)
-                      const Text(
-                        'اضغط للتحديث',
-                        style: TextStyle(fontSize: 8, color: Colors.red),
-                      ),
-                  ],
-                ),
-              ],
-            ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFFFFEBEE), // Very light red/pink
+              Color(0xFFFFCDD2), // Light red/pink
+              Color(0xFFEF9A9A), // Soft red
+            ],
           ),
-
-          // Preset queries section
-          Container(
-            height: 60,
-            padding: const EdgeInsets.symmetric(vertical: 8.0),
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              itemCount: _presetQueries.length,
-              itemBuilder: (context, index) {
-                final preset = _presetQueries[index];
-                return _buildPresetQuery(
-                  preset['title']!,
-                  preset['query']!,
-                  preset['icon']!,
-                );
-              },
-            ),
-          ),
-
-          const Divider(height: 1),
-
-          // Messages area
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                final isBot = message['sender'] == '🤖';
-                return _buildMessageBubble(message, isBot);
-              },
-            ),
-          ),
-
-          // Loading indicator
-          if (_isLoading)
+        ),
+        child: Column(
+          children: [
+            // Data summary header
             Container(
+              width: double.infinity,
+              margin: const EdgeInsets.all(8.0),
               padding: const EdgeInsets.all(16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.blue.shade600,
-                    ),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'جاري التحليل...',
-                    style: TextStyle(color: Colors.grey),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  Column(
+                    children: [
+                      Text(
+                        '${allOrders.length}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: allOrders.isEmpty
+                              ? Colors.red.shade600
+                              : Colors.blue.shade600,
+                        ),
+                      ),
+                      Text(
+                        allOrders.isEmpty ? 'لا توجد طلبات' : 'إجمالي الطلبات',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Column(
+                    children: [
+                      Text(
+                        allOrders.isEmpty
+                            ? 'غير متاح'
+                            : '${_calculateTotalRevenue().toStringAsFixed(0)} دج',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                      Text(
+                        'إجمالي الإيرادات',
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: allOrders.isEmpty
+                              ? Colors.red.shade50
+                              : Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          allOrders.isEmpty
+                              ? Icons.error_outline
+                              : Icons.analytics,
+                          color: allOrders.isEmpty
+                              ? Colors.red.shade600
+                              : Colors.blue.shade600,
+                          size: 32,
+                        ),
+                      ),
+                      if (allOrders.isEmpty)
+                        Text(
+                          'اضغط للتحديث',
+                          style: GoogleFonts.poppins(
+                            fontSize: 8,
+                            color: Colors.red.shade600,
+                          ),
+                        ),
+                    ],
                   ),
                 ],
               ),
             ),
 
-          // Input area
-          Container(
-            padding: const EdgeInsets.all(16.0),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, -2),
-                ),
-              ],
+            // Preset queries section
+            Container(
+              height: 70,
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                itemCount: _presetQueries.length,
+                itemBuilder: (context, index) {
+                  final preset = _presetQueries[index];
+                  return _buildPresetQuery(
+                    preset['title']!,
+                    preset['query']!,
+                    preset['icon']!,
+                  );
+                },
+              ),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.grey.shade300),
-                      color: Colors.grey.shade50,
+
+            const Divider(height: 1, color: Colors.white),
+
+            // Messages area
+            Expanded(
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
                     ),
-                    child: TextField(
-                      controller: _controller,
-                      onSubmitted: _handleSubmitted,
-                      decoration: const InputDecoration(
-                        hintText: "اسأل عن إحصائيات المبيعات...",
-                        hintStyle: TextStyle(color: Colors.grey),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
+                  ],
+                ),
+                child: ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  itemCount: _messages.length,
+                  itemBuilder: (context, index) {
+                    final message = _messages[index];
+                    final isBot = message['sender'] == '🤖';
+                    return _buildMessageBubble(message, isBot);
+                  },
+                ),
+              ),
+            ),
+
+            // Loading indicator
+            if (_isLoading)
+              Container(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.red.shade600,
                       ),
-                      maxLines: null,
-                      textDirection: TextDirection.rtl,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'جاري التحليل...',
+                      style: GoogleFonts.poppins(
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Input area
+            Container(
+              margin: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(16.0),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.red.shade200),
+                        color: Colors.red.shade50,
+                      ),
+                      child: TextField(
+                        controller: _controller,
+                        onSubmitted: _handleSubmitted,
+                        decoration: InputDecoration(
+                          hintText: "اسأل عن إحصائيات المبيعات...",
+                          hintStyle: GoogleFonts.poppins(
+                            color: Colors.grey.shade600,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
+                        ),
+                        style: GoogleFonts.poppins(),
+                        maxLines: null,
+                        textDirection: TextDirection.rtl,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade600,
-                    borderRadius: BorderRadius.circular(24),
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [
+                          Color(0xFFE57373), // Soft red
+                          Color(0xFFD32F2F), // Medium red
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.red.withValues(alpha: 0.3),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.send, color: Colors.white),
+                      onPressed: _isLoading
+                          ? null
+                          : () => _handleSubmitted(_controller.text),
+                    ),
                   ),
-                  child: IconButton(
-                    icon: const Icon(Icons.send, color: Colors.white),
-                    onPressed: _isLoading
-                        ? null
-                        : () => _handleSubmitted(_controller.text),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

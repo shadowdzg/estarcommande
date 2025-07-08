@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EST STAR Commande - Admin Panel</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            background: #f9f9f9;
+        }
+
+        .section h2 {
+            color: #d32f2f;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #d32f2f;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-right: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(211, 47, 47, 0.3);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #757575 0%, #424242 100%);
+        }
+
+        .btn-secondary:hover {
+            box-shadow: 0 5px 15px rgba(117, 117, 117, 0.3);
+        }
+
+        .file-upload {
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .file-upload:hover {
+            border-color: #d32f2f;
+            background: #fafafa;
+        }
+
+        .file-upload.dragover {
+            border-color: #d32f2f;
+            background: #ffebee;
+        }
+
+        .current-config {
+            background: #e8f5e8;
+            border: 1px solid #4caf50;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .current-config h3 {
+            color: #2e7d32;
+            margin-bottom: 15px;
+        }
+
+        .config-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid #c8e6c9;
+        }
+
+        .config-item:last-child {
+            border-bottom: none;
+        }
+
+        .status {
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            display: none;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .progress {
+            display: none;
+            margin: 10px 0;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            background: #e0e0e0;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #d32f2f, #b71c1c);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .content {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>EST STAR Commande</h1>
+            <p>Panneau d'administration des mises à jour</p>
+        </div>
+
+        <div class="content">
+            <!-- Current Configuration -->
+            <div class="section">
+                <h2>Configuration Actuelle</h2>
+                <div class="current-config" id="currentConfig">
+                    <h3>Version Actuelle</h3>
+                    <div id="configDisplay">
+                        <div class="config-item">
+                            <span>Version:</span>
+                            <span id="currentVersion">-</span>
+                        </div>
+                        <div class="config-item">
+                            <span>Build:</span>
+                            <span id="currentBuild">-</span>
+                        </div>
+                        <div class="config-item">
+                            <span>Date de publication:</span>
+                            <span id="currentDate">-</span>
+                        </div>
+                        <div class="config-item">
+                            <span>Mise à jour forcée:</span>
+                            <span id="currentForceUpdate">-</span>
+                        </div>
+                        <div class="config-item">
+                            <span>Mise à jour critique:</span>
+                            <span id="currentCriticalUpdate">-</span>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-secondary" onclick="loadCurrentConfig()">Actualiser</button>
+            </div>
+
+            <div class="grid">
+                <!-- Version Management -->
+                <div class="section">
+                    <h2>Gestion des Versions</h2>
+                    <form id="versionForm">
+                        <div class="form-group">
+                            <label for="version">Version (ex: 1.0.1)</label>
+                            <input type="text" id="version" name="version" placeholder="1.0.1" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="buildNumber">Numéro de Build</label>
+                            <input type="number" id="buildNumber" name="buildNumber" placeholder="1" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="changelog">Notes de version (une par ligne)</label>
+                            <textarea id="changelog" name="changelog" 
+                                placeholder="Nouvelles fonctionnalités&#10;Corrections de bugs&#10;Améliorations"></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="forceUpdate" name="forceUpdate">
+                                <label for="forceUpdate">Mise à jour forcée</label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="criticalUpdate" name="criticalUpdate">
+                                <label for="criticalUpdate">Mise à jour critique</label>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn">Publier Version</button>
+                    </form>
+                </div>
+
+                <!-- File Upload -->
+                <div class="section">
+                    <h2>Téléchargement des Fichiers</h2>
+                    
+                    <div class="form-group">
+                        <label for="platform">Plateforme</label>
+                        <select id="platform" name="platform">
+                            <option value="android">Android (.apk)</option>
+                            <option value="windows">Windows (.exe/.msi)</option>
+                            <option value="ios">iOS (.ipa)</option>
+                        </select>
+                    </div>
+
+                    <div class="file-upload" onclick="document.getElementById('fileInput').click()">
+                        <input type="file" id="fileInput" style="display: none;" accept=".apk,.exe,.msi,.ipa">
+                        <p>Cliquez pour sélectionner un fichier ou glissez-déposez ici</p>
+                        <p id="fileName" style="margin-top: 10px; font-weight: bold;"></p>
+                    </div>
+
+                    <div class="progress" id="uploadProgress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                        <p id="progressText">0%</p>
+                    </div>
+
+                    <button class="btn" onclick="uploadFile()" style="margin-top: 15px;">
+                        Télécharger Fichier
+                    </button>
+                </div>
+            </div>
+
+            <!-- Status Messages -->
+            <div class="status" id="statusMessage"></div>
+        </div>
+    </div>
+
+    <script>
+        // Load current configuration on page load
+        window.addEventListener('load', loadCurrentConfig);
+
+        // File upload handling
+        const fileInput = document.getElementById('fileInput');
+        const fileName = document.getElementById('fileName');
+        const fileUpload = document.querySelector('.file-upload');
+
+        fileInput.addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                fileName.textContent = e.target.files[0].name;
+            }
+        });
+
+        // Drag and drop
+        fileUpload.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            fileUpload.classList.add('dragover');
+        });
+
+        fileUpload.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            fileUpload.classList.remove('dragover');
+        });
+
+        fileUpload.addEventListener('drop', function(e) {
+            e.preventDefault();
+            fileUpload.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                fileName.textContent = files[0].name;
+            }
+        });
+
+        // Version form submission
+        document.getElementById('versionForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const changelog = formData.get('changelog').split('\n').filter(line => line.trim());
+            
+            const data = {
+                version: formData.get('version'),
+                buildNumber: parseInt(formData.get('buildNumber')),
+                changelog: changelog,
+                forceUpdate: formData.get('forceUpdate') === 'on',
+                criticalUpdate: formData.get('criticalUpdate') === 'on'
+            };
+
+            fetch('/api/admin/version', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showStatus('error', data.error);
+                } else {
+                    showStatus('success', 'Version publiée avec succès!');
+                    loadCurrentConfig();
+                }
+            })
+            .catch(error => {
+                showStatus('error', 'Erreur lors de la publication: ' + error.message);
+            });
+        });
+
+        // File upload function
+        function uploadFile() {
+            const file = fileInput.files[0];
+            const platform = document.getElementById('platform').value;
+            
+            if (!file) {
+                showStatus('error', 'Veuillez sélectionner un fichier');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('app', file);
+
+            const progress = document.getElementById('uploadProgress');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            
+            progress.style.display = 'block';
+
+            const xhr = new XMLHttpRequest();
+            
+            xhr.upload.addEventListener('progress', function(e) {
+                if (e.lengthComputable) {
+                    const percentComplete = (e.loaded / e.total) * 100;
+                    progressFill.style.width = percentComplete + '%';
+                    progressText.textContent = Math.round(percentComplete) + '%';
+                }
+            });
+
+            xhr.addEventListener('load', function() {
+                progress.style.display = 'none';
+                if (xhr.status === 200) {
+                    const response = JSON.parse(xhr.responseText);
+                    showStatus('success', 'Fichier téléchargé avec succès!');
+                    loadCurrentConfig();
+                } else {
+                    const error = JSON.parse(xhr.responseText);
+                    showStatus('error', error.error || 'Erreur lors du téléchargement');
+                }
+            });
+
+            xhr.addEventListener('error', function() {
+                progress.style.display = 'none';
+                showStatus('error', 'Erreur réseau lors du téléchargement');
+            });
+
+            xhr.open('POST', `/api/admin/upload/${platform}`);
+            xhr.send(formData);
+        }
+
+        // Load current configuration
+        function loadCurrentConfig() {
+            fetch('/api/admin/config')
+                .then(response => response.json())
+                .then(data => {
+                    const latest = data.latest;
+                    document.getElementById('currentVersion').textContent = latest.version;
+                    document.getElementById('currentBuild').textContent = latest.buildNumber;
+                    document.getElementById('currentDate').textContent = new Date(latest.releaseDate).toLocaleDateString('fr-FR');
+                    document.getElementById('currentForceUpdate').textContent = latest.forceUpdate ? 'Oui' : 'Non';
+                    document.getElementById('currentCriticalUpdate').textContent = latest.criticalUpdate ? 'Oui' : 'Non';
+                })
+                .catch(error => {
+                    showStatus('error', 'Erreur lors du chargement de la configuration');
+                });
+        }
+
+        // Show status message
+        function showStatus(type, message) {
+            const statusElement = document.getElementById('statusMessage');
+            statusElement.className = `status ${type}`;
+            statusElement.textContent = message;
+            statusElement.style.display = 'block';
+            
+            setTimeout(() => {
+                statusElement.style.display = 'none';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

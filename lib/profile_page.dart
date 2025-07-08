@@ -47,9 +47,7 @@ class _ProfilePageState extends State<ProfilePage> {
         backgroundColor: Colors.red.shade600,
         duration: const Duration(seconds: 3),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -57,11 +55,11 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _changePassword(String pass) async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
-    
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = await prefs.getString('auth_token');
-      
+
       if (token == null) {
         _showError('Veuillez vous reconnecter');
         setState(() => _loading = false);
@@ -85,7 +83,9 @@ class _ProfilePageState extends State<ProfilePage> {
         _passwordController.clear();
         _confirmPasswordController.clear();
       } else {
-        _showError('Échec de la modification du mot de passe. Vérifiez les données.');
+        _showError(
+          'Échec de la modification du mot de passe. Vérifiez les données.',
+        );
         setState(() => _loading = false);
       }
     } catch (e) {
@@ -93,7 +93,7 @@ class _ProfilePageState extends State<ProfilePage> {
       setState(() => _loading = false);
     }
   }
-  
+
   void _showSuccess(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -107,9 +107,7 @@ class _ProfilePageState extends State<ProfilePage> {
         backgroundColor: Colors.green.shade600,
         duration: const Duration(seconds: 3),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -205,9 +203,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Password Change Section
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
@@ -268,9 +266,9 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                           ],
                         ),
-                        
+
                         const SizedBox(height: 32),
-                        
+
                         // New Password Field
                         Text(
                           'Nouveau mot de passe',
@@ -284,7 +282,9 @@ class _ProfilePageState extends State<ProfilePage> {
                         TextFormField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
-                          onChanged: (value) => setState(() {}), // Trigger rebuild for password strength
+                          onChanged: (value) => setState(
+                            () {},
+                          ), // Trigger rebuild for password strength
                           decoration: InputDecoration(
                             hintText: 'Entrez le nouveau mot de passe',
                             hintStyle: TextStyle(color: Colors.grey.shade400),
@@ -344,21 +344,25 @@ class _ProfilePageState extends State<ProfilePage> {
                             if (value.length < 8) {
                               return 'Le mot de passe doit contenir au moins 8 caractères';
                             }
-                            if (!RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)').hasMatch(value)) {
+                            if (!RegExp(
+                              r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)',
+                            ).hasMatch(value)) {
                               return 'Le mot de passe doit contenir des majuscules, minuscules et chiffres';
                             }
                             return null;
                           },
                         ),
-                        
+
                         // Password Strength Indicator
                         if (_passwordController.text.isNotEmpty) ...[
                           const SizedBox(height: 12),
-                          _buildPasswordStrengthIndicator(_passwordController.text),
+                          _buildPasswordStrengthIndicator(
+                            _passwordController.text,
+                          ),
                         ],
-                        
+
                         const SizedBox(height: 20),
-                        
+
                         // Confirm Password Field
                         Text(
                           'Confirmer le mot de passe',
@@ -388,7 +392,8 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                               onPressed: () {
                                 setState(() {
-                                  _obscureConfirmPassword = !_obscureConfirmPassword;
+                                  _obscureConfirmPassword =
+                                      !_obscureConfirmPassword;
                                 });
                               },
                             ),
@@ -434,9 +439,9 @@ class _ProfilePageState extends State<ProfilePage> {
                             return null;
                           },
                         ),
-                        
+
                         const SizedBox(height: 32),
-                        
+
                         // Submit Button
                         SizedBox(
                           width: double.infinity,
@@ -453,7 +458,8 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                             onPressed: _loading
                                 ? null
-                                : () => _changePassword(_passwordController.text),
+                                : () =>
+                                      _changePassword(_passwordController.text),
                             child: _loading
                                 ? Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -495,9 +501,9 @@ class _ProfilePageState extends State<ProfilePage> {
                                   ),
                           ),
                         ),
-                        
+
                         const SizedBox(height: 16),
-                        
+
                         // Security tips
                         Container(
                           padding: const EdgeInsets.all(16),
@@ -528,11 +534,16 @@ class _ProfilePageState extends State<ProfilePage> {
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              ...['Utilisez un mot de passe différent pour chaque compte', 'Créez un mot de passe d\'au moins 8 caractères', 'Utilisez un mélange de lettres, chiffres et symboles'].map((tip) => 
-                                Padding(
+                              ...[
+                                'Utilisez un mot de passe différent pour chaque compte',
+                                'Créez un mot de passe d\'au moins 8 caractères',
+                                'Utilisez un mélange de lettres, chiffres et symboles',
+                              ].map(
+                                (tip) => Padding(
                                   padding: const EdgeInsets.only(top: 4),
                                   child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Icon(
                                         Icons.check_circle_outline,
@@ -562,7 +573,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
             ),
-            
+
             const SizedBox(height: 32),
           ],
         ),
@@ -574,7 +585,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final strength = _calculatePasswordStrength(password);
     final strengthText = _getPasswordStrengthText(strength);
     final strengthColor = _getPasswordStrengthColor(strength);
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -582,10 +593,7 @@ class _ProfilePageState extends State<ProfilePage> {
           children: [
             Text(
               'Force du mot de passe: ',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade600,
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
             ),
             Text(
               strengthText,

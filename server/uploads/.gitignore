@@ -1,0 +1,10 @@
+# Ignore uploaded files
+*.apk
+*.exe
+*.msi
+*.ipa
+*.zip
+*.tar.gz
+
+# Keep directory structure
+!.gitkeep

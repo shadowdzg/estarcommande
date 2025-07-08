@@ -3,10 +3,8 @@ import 'dart:convert';
 import 'package:EstStarCommande/purchase_orders_page.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'main.dart'; // for decodeJwtPayload
 import 'login_page.dart';
-import 'settings.dart';
-import 'profile_page.dart';
+import 'services/update_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -66,7 +64,17 @@ class _EntryPointState extends State<EntryPoint> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkRoleAndNavigate();
+      // Check for updates after navigation
+      _checkForUpdates();
     });
+  }
+
+  Future<void> _checkForUpdates() async {
+    // Wait a bit to ensure the user has navigated
+    await Future.delayed(const Duration(seconds: 3));
+    if (mounted) {
+      UpdateService.checkForServerUpdate(context);
+    }
   }
 
   Future<void> _checkRoleAndNavigate() async {
@@ -85,7 +93,6 @@ class _EntryPointState extends State<EntryPoint> {
     final isSuper = payload['issuper'] == 1;
     final isAssistant = payload['isassistant'] == 1;
     final isClient = payload['isclient'] == 1;
-    final username = payload['username'] ?? 'Unknown';
 
     if (isAdmin || isSuper) {
       Navigator.pushReplacement(

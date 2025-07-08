@@ -5,13 +5,7 @@ import 'package:flutter_typeahead/flutter_typeahead.dart'; // For TypeAheadFormF
 import 'package:shared_preferences/shared_preferences.dart'; // For SharedPreferences
 import 'app_drawer.dart';
 
-enum UserRole {
-  admin,
-  superuser,
-  commercial,
-  delegue,
-  user,
-}
+enum UserRole { admin, superuser, commercial, delegue, user }
 
 class AdminPanelPage extends StatefulWidget {
   const AdminPanelPage({Key? key}) : super(key: key);
@@ -377,7 +371,9 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                   margin: const EdgeInsets.symmetric(vertical: 6),
                   child: ListTile(
                     title: Text(product.productName ?? ''),
-                    subtitle: Text('Price: ${product.initialPrice?.toStringAsFixed(2) ?? '0.00'}%'),
+                    subtitle: Text(
+                      'Price: ${product.initialPrice?.toStringAsFixed(2) ?? '0.00'}%',
+                    ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -602,9 +598,11 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                               suggestionsCallback: (pattern) async {
                                 if (pattern.isEmpty) return [];
                                 try {
-                                  final prefs = await SharedPreferences.getInstance();
-                                  final token = prefs.getString('auth_token') ?? '';
-                                  
+                                  final prefs =
+                                      await SharedPreferences.getInstance();
+                                  final token =
+                                      prefs.getString('auth_token') ?? '';
+
                                   final response = await http.get(
                                     Uri.parse(
                                       'http://92.222.248.113:3000/api/v1/clients/search?term=$pattern',
@@ -615,16 +613,18 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                                     },
                                   );
                                   if (response.statusCode == 200) {
-                                    final List<dynamic> clientsJson = jsonDecode(
-                                      response.body,
-                                    );
+                                    final List<dynamic> clientsJson =
+                                        jsonDecode(response.body);
                                     CreateClientsMap = {
                                       for (var client in clientsJson)
-                                        client['clientName']: client['clientsID'],
+                                        client['clientName']:
+                                            client['clientsID'],
                                     };
                                     return CreateClientsMap.keys.toList();
                                   } else {
-                                    print('Client search failed: ${response.statusCode}');
+                                    print(
+                                      'Client search failed: ${response.statusCode}',
+                                    );
                                     return [];
                                   }
                                 } catch (e) {
@@ -787,7 +787,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         TextEditingController();
     final TextEditingController _initialPriceController =
         TextEditingController();
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -815,8 +815,9 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           ElevatedButton(
             onPressed: () async {
               final String productName = _productNameController.text.trim();
-              final String initialPriceStr = _initialPriceController.text.trim();
-              
+              final String initialPriceStr = _initialPriceController.text
+                  .trim();
+
               if (productName.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Product name is required')),
@@ -824,10 +825,13 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                 return;
               }
 
-              final url = Uri.parse('http://92.222.248.113:3000/api/v1/products');
+              final url = Uri.parse(
+                'http://92.222.248.113:3000/api/v1/products',
+              );
               final body = jsonEncode({
                 "productName": productName,
-                if (initialPriceStr.isNotEmpty) "initialPrice": double.tryParse(initialPriceStr) ?? 0,
+                if (initialPriceStr.isNotEmpty)
+                  "initialPrice": double.tryParse(initialPriceStr) ?? 0,
               });
 
               try {
@@ -841,7 +845,9 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Product "$productName" added successfully!'),
+                      content: Text(
+                        'Product "$productName" added successfully!',
+                      ),
                     ),
                   );
                   _fetchProducts(); // Refresh list
@@ -853,9 +859,9 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                   );
                 }
               } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error: $e')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('Error: $e')));
               }
             },
             child: const Text('Add'),
@@ -893,11 +899,13 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                       );
                     },
                     suggestionsCallback: (pattern) {
-                      return _clients.where(
-                        (client) => client.clientName!.toLowerCase().contains(
-                          pattern.toLowerCase(),
-                        ),
-                      ).toList();
+                      return _clients
+                          .where(
+                            (client) => client.clientName!
+                                .toLowerCase()
+                                .contains(pattern.toLowerCase()),
+                          )
+                          .toList();
                     },
                     itemBuilder: (context, Client suggestion) {
                       return ListTile(
@@ -1011,11 +1019,13 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                       );
                     },
                     suggestionsCallback: (pattern) {
-                      return _clients.where(
-                        (client) => client.clientName!.toLowerCase().contains(
-                          pattern.toLowerCase(),
-                        ),
-                      ).toList();
+                      return _clients
+                          .where(
+                            (client) => client.clientName!
+                                .toLowerCase()
+                                .contains(pattern.toLowerCase()),
+                          )
+                          .toList();
                     },
                     itemBuilder: (context, Client suggestion) {
                       return ListTile(
@@ -1111,11 +1121,13 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   }
 
   void _showEditProductDialog(Product product) {
-    final TextEditingController _productNameController =
-        TextEditingController(text: product.productName ?? '');
-    final TextEditingController _initialPriceController =
-        TextEditingController(text: product.initialPrice?.toString() ?? '');
-    
+    final TextEditingController _productNameController = TextEditingController(
+      text: product.productName ?? '',
+    );
+    final TextEditingController _initialPriceController = TextEditingController(
+      text: product.initialPrice?.toString() ?? '',
+    );
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1143,8 +1155,9 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           ElevatedButton(
             onPressed: () async {
               final String productName = _productNameController.text.trim();
-              final String initialPriceStr = _initialPriceController.text.trim();
-              
+              final String initialPriceStr = _initialPriceController.text
+                  .trim();
+
               if (productName.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Product name is required')),
@@ -1152,14 +1165,17 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                 return;
               }
 
-              final url = Uri.parse('http://92.222.248.113:3000/api/v1/products/${product.productID}');
+              final url = Uri.parse(
+                'http://92.222.248.113:3000/api/v1/products/${product.productID}',
+              );
               final Map<String, dynamic> updateData = {};
-              
+
               if (productName != product.productName) {
                 updateData['productName'] = productName;
               }
               if (initialPriceStr.isNotEmpty) {
-                updateData['initialPrice'] = double.tryParse(initialPriceStr) ?? 0;
+                updateData['initialPrice'] =
+                    double.tryParse(initialPriceStr) ?? 0;
               }
 
               if (updateData.isEmpty) {
@@ -1183,21 +1199,25 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Product "$productName" updated successfully!'),
+                      content: Text(
+                        'Product "$productName" updated successfully!',
+                      ),
                     ),
                   );
                   _fetchProducts(); // Refresh list
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Failed to update product: ${response.body}'),
+                      content: Text(
+                        'Failed to update product: ${response.body}',
+                      ),
                     ),
                   );
                 }
               } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error: $e')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('Error: $e')));
               }
             },
             child: const Text('Update'),
@@ -1247,30 +1267,36 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                   ],
                 ),
               );
-              
+
               if (confirmed == true) {
-                final url = Uri.parse('http://92.222.248.113:3000/api/v1/products/${product.productID}');
+                final url = Uri.parse(
+                  'http://92.222.248.113:3000/api/v1/products/${product.productID}',
+                );
                 try {
                   final response = await http.delete(url);
                   if (response.statusCode == 200) {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Product "${product.productName}" deleted successfully!'),
+                        content: Text(
+                          'Product "${product.productName}" deleted successfully!',
+                        ),
                       ),
                     );
                     _fetchProducts(); // Refresh list
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Failed to delete product: ${response.body}'),
+                        content: Text(
+                          'Failed to delete product: ${response.body}',
+                        ),
                       ),
                     );
                   }
                 } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: $e')),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
                 }
               }
             },

@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EST STAR Commande - Gestionnaire de versions</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #dc2626, #b91c1c);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #374151;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #dc2626;
+        }
+        
+        .btn {
+            background: #dc2626;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .btn:hover {
+            background: #b91c1c;
+        }
+        
+        .btn-secondary {
+            background: #6b7280;
+        }
+        
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+        
+        .platform-section {
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+        
+        .platform-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: #dc2626;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .changelog-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .changelog-item input {
+            flex: 1;
+        }
+        
+        .btn-small {
+            padding: 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        .current-version {
+            background: #f0f9ff;
+            border: 2px solid #0ea5e9;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .success {
+            background: #10b981;
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+        
+        .error {
+            background: #ef4444;
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>EST STAR Commande</h1>
+        <p>Gestionnaire de versions d'application</p>
+    </div>
+    
+    <div class="container">
+        <div class="card">
+            <h2>Gestion des versions</h2>
+            
+            <div id="message"></div>
+            
+            <form id="versionForm">
+                <div class="grid">
+                    <!-- Android Section -->
+                    <div class="platform-section">
+                        <div class="platform-title">🤖 Android</div>
+                        
+                        <div class="current-version">
+                            <strong>Version actuelle:</strong> <span id="currentAndroidVersion">1.0.0</span><br>
+                            <strong>Build:</strong> <span id="currentAndroidBuild">1</span>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="androidVersion">Nouvelle version</label>
+                            <input type="text" id="androidVersion" name="androidVersion" placeholder="1.0.1" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="androidBuild">Numéro de build</label>
+                            <input type="number" id="androidBuild" name="androidBuild" placeholder="2" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="androidDownloadUrl">URL de téléchargement</label>
+                            <input type="url" id="androidDownloadUrl" name="androidDownloadUrl" placeholder="https://update.eststar.dz/apps/app.apk" required>
+                        </div>
+                        
+                        <div class="checkbox-group">
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="androidForceUpdate" name="androidForceUpdate">
+                                <label for="androidForceUpdate">Mise à jour forcée</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="androidCriticalUpdate" name="androidCriticalUpdate">
+                                <label for="androidCriticalUpdate">Mise à jour critique</label>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Changelog</label>
+                            <div id="androidChangelog">
+                                <div class="changelog-item">
+                                    <input type="text" placeholder="Nouvelle fonctionnalité...">
+                                    <button type="button" class="btn btn-small" onclick="removeChangelogItem(this)">-</button>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-secondary btn-small" onclick="addChangelogItem('android')">Ajouter une ligne</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Windows Section -->
+                    <div class="platform-section">
+                        <div class="platform-title">🪟 Windows</div>
+                        
+                        <div class="current-version">
+                            <strong>Version actuelle:</strong> <span id="currentWindowsVersion">1.0.0</span><br>
+                            <strong>Build:</strong> <span id="currentWindowsBuild">1</span>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="windowsVersion">Nouvelle version</label>
+                            <input type="text" id="windowsVersion" name="windowsVersion" placeholder="1.0.1" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="windowsBuild">Numéro de build</label>
+                            <input type="number" id="windowsBuild" name="windowsBuild" placeholder="2" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="windowsDownloadUrl">URL de téléchargement</label>
+                            <input type="url" id="windowsDownloadUrl" name="windowsDownloadUrl" placeholder="https://update.eststar.dz/apps/app-windows.zip" required>
+                        </div>
+                        
+                        <div class="checkbox-group">
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="windowsForceUpdate" name="windowsForceUpdate">
+                                <label for="windowsForceUpdate">Mise à jour forcée</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="windowsCriticalUpdate" name="windowsCriticalUpdate">
+                                <label for="windowsCriticalUpdate">Mise à jour critique</label>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Changelog</label>
+                            <div id="windowsChangelog">
+                                <div class="changelog-item">
+                                    <input type="text" placeholder="Nouvelle fonctionnalité...">
+                                    <button type="button" class="btn btn-small" onclick="removeChangelogItem(this)">-</button>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-secondary btn-small" onclick="addChangelogItem('windows')">Ajouter une ligne</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="text-align: center; margin-top: 2rem;">
+                    <button type="button" class="btn btn-secondary" onclick="loadCurrentVersions()">Actualiser les versions actuelles</button>
+                    <button type="submit" class="btn">Mettre à jour les versions</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        function addChangelogItem(platform) {
+            const container = document.getElementById(platform + 'Changelog');
+            const div = document.createElement('div');
+            div.className = 'changelog-item';
+            div.innerHTML = `
+                <input type="text" placeholder="Nouvelle fonctionnalité...">
+                <button type="button" class="btn btn-small" onclick="removeChangelogItem(this)">-</button>
+            `;
+            container.appendChild(div);
+        }
+        
+        function removeChangelogItem(button) {
+            const container = button.parentElement.parentElement;
+            if (container.children.length > 1) {
+                button.parentElement.remove();
+            }
+        }
+        
+        function loadCurrentVersions() {
+            // This would typically load from your PHP config
+            // For now, we'll just show a message
+            showMessage('Fonctionnalité à implémenter: charger les versions actuelles', 'info');
+        }
+        
+        function showMessage(text, type = 'success') {
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = `<div class="${type}">${text}</div>`;
+            setTimeout(() => {
+                messageDiv.innerHTML = '';
+            }, 5000);
+        }
+        
+        document.getElementById('versionForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Collect form data
+            const formData = new FormData(this);
+            
+            // Collect changelog items
+            const androidChangelog = [];
+            document.querySelectorAll('#androidChangelog input').forEach(input => {
+                if (input.value.trim()) {
+                    androidChangelog.push(input.value.trim());
+                }
+            });
+            
+            const windowsChangelog = [];
+            document.querySelectorAll('#windowsChangelog input').forEach(input => {
+                if (input.value.trim()) {
+                    windowsChangelog.push(input.value.trim());
+                }
+            });
+            
+            // Prepare data for PHP
+            const data = {
+                android: {
+                    version: formData.get('androidVersion'),
+                    buildNumber: parseInt(formData.get('androidBuild')),
+                    downloadUrl: formData.get('androidDownloadUrl'),
+                    changelog: androidChangelog,
+                    isForceUpdate: formData.has('androidForceUpdate'),
+                    isCriticalUpdate: formData.has('androidCriticalUpdate')
+                },
+                windows: {
+                    version: formData.get('windowsVersion'),
+                    buildNumber: parseInt(formData.get('windowsBuild')),
+                    downloadUrl: formData.get('windowsDownloadUrl'),
+                    changelog: windowsChangelog,
+                    isForceUpdate: formData.has('windowsForceUpdate'),
+                    isCriticalUpdate: formData.has('windowsCriticalUpdate')
+                }
+            };
+            
+            // Send to update_version.php
+            fetch('update_version.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage('Versions mises à jour avec succès!', 'success');
+                    loadCurrentVersions();
+                } else {
+                    showMessage('Erreur: ' + data.message, 'error');
+                }
+            })
+            .catch(error => {
+                showMessage('Erreur de connexion: ' + error.message, 'error');
+            });
+        });
+        
+        // Load current versions on page load
+        loadCurrentVersions();
+    </script>
+</body>
+</html>

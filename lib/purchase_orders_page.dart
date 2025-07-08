@@ -17,6 +17,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/services.dart'; // For Clipboard
 import 'package:excel/excel.dart' as excel;
 import 'package:path/path.dart' as p;
+import 'package:google_fonts/google_fonts.dart';
 
 // Product class for database integration
 class Product {
@@ -729,104 +730,117 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                   const SizedBox(height: 8),
                   if (selectedProducts.isNotEmpty)
                     Container(
-                      height: selectedProducts.length > 5 
+                      height: selectedProducts.length > 5
                           ? 400.0 // Max height for 5 items
                           : selectedProducts.length * 80.0,
                       child: ListView.builder(
                         shrinkWrap: true,
                         itemCount: selectedProducts.length,
                         itemBuilder: (context, index) {
-                        final item = selectedProducts[index];
-                        return Card(
-                          margin: EdgeInsets.symmetric(vertical: 4),
-                          child: Padding(
-                            padding: EdgeInsets.all(8),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  flex: 2,
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        item['product'],
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w500,
+                          final item = selectedProducts[index];
+                          return Card(
+                            margin: EdgeInsets.symmetric(vertical: 4),
+                            child: Padding(
+                              padding: EdgeInsets.all(8),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    flex: 2,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item['product'],
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Prix BD: ${item['unitPrice'].toStringAsFixed(2)} DA',
+                                          style: TextStyle(
+                                            color: Colors.grey[600],
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  SizedBox(width: 4),
+                                  Expanded(
+                                    flex: 1,
+                                    child: TextFormField(
+                                      initialValue: item['unitPrice']
+                                          .toStringAsFixed(2),
+                                      keyboardType:
+                                          TextInputType.numberWithOptions(
+                                            decimal: true,
+                                          ),
+                                      enabled:
+                                          !isclient, // Read-only for clients
+                                      onChanged: (value) {
+                                        item['unitPrice'] =
+                                            double.tryParse(value) ??
+                                            item['unitPrice'];
+                                      },
+                                      decoration: InputDecoration(
+                                        labelText: 'PU',
+                                        border: OutlineInputBorder(),
+                                        contentPadding: EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 4,
+                                        ),
+                                        fillColor: isclient
+                                            ? Colors.grey[100]
+                                            : null,
+                                        filled: isclient,
+                                      ),
+                                      style: TextStyle(
+                                        color: isclient
+                                            ? Colors.grey[600]
+                                            : null,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(width: 4),
+                                  Expanded(
+                                    flex: 1,
+                                    child: TextFormField(
+                                      initialValue: item['quantity'].toString(),
+                                      keyboardType: TextInputType.number,
+                                      onChanged: (value) {
+                                        item['quantity'] =
+                                            int.tryParse(value) ?? 1;
+                                      },
+                                      decoration: InputDecoration(
+                                        labelText: 'Qty',
+                                        border: OutlineInputBorder(),
+                                        contentPadding: EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 4,
                                         ),
                                       ),
-                                      Text(
-                                        'Prix BD: ${item['unitPrice'].toStringAsFixed(2)} DA',
-                                        style: TextStyle(
-                                          color: Colors.grey[600],
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                    ],
+                                    ),
                                   ),
-                                ),
-                                SizedBox(width: 4),
-                                Expanded(
-                                  flex: 1,
-                                  child: TextFormField(
-                                    initialValue: item['unitPrice'].toStringAsFixed(2),
-                                    keyboardType: TextInputType.numberWithOptions(decimal: true),
-                                    enabled: !isclient, // Read-only for clients
-                                    onChanged: (value) {
-                                      item['unitPrice'] = double.tryParse(value) ?? item['unitPrice'];
+                                  SizedBox(width: 8),
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.remove_circle,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed: () {
+                                      setStateDialog(() {
+                                        selectedProducts.removeAt(index);
+                                      });
                                     },
-                                    decoration: InputDecoration(
-                                      labelText: 'PU',
-                                      border: OutlineInputBorder(),
-                                      contentPadding: EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 4,
-                                      ),
-                                      fillColor: isclient ? Colors.grey[100] : null,
-                                      filled: isclient,
-                                    ),
-                                    style: TextStyle(
-                                      color: isclient ? Colors.grey[600] : null,
-                                    ),
                                   ),
-                                ),
-                                SizedBox(width: 4),
-                                Expanded(
-                                  flex: 1,
-                                  child: TextFormField(
-                                    initialValue: item['quantity'].toString(),
-                                    keyboardType: TextInputType.number,
-                                    onChanged: (value) {
-                                      item['quantity'] = int.tryParse(value) ?? 1;
-                                    },
-                                    decoration: InputDecoration(
-                                      labelText: 'Qty',
-                                      border: OutlineInputBorder(),
-                                      contentPadding: EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 4,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(width: 8),
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.remove_circle,
-                                    color: Colors.red,
-                                  ),
-                                  onPressed: () {
-                                    setStateDialog(() {
-                                      selectedProducts.removeAt(index);
-                                    });
-                                  },
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                    ), // End of ListView.builder
-                  ), // End of Container
+                          );
+                        },
+                      ), // End of ListView.builder
+                    ), // End of Container
                 ],
               );
             },
@@ -840,13 +854,13 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       builder: (_) {
         final screenWidth = MediaQuery.of(context).size.width;
         final screenHeight = MediaQuery.of(context).size.height;
-        
+
         // Responsive sizing based on screen width
         double dialogWidth;
         double dialogHeight;
         double maxWidth;
         double maxHeight;
-        
+
         if (screenWidth > 1200) {
           // Large desktop
           dialogWidth = screenWidth * 0.6;
@@ -866,9 +880,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           maxWidth = 500;
           maxHeight = 450;
         }
-        
+
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Container(
             width: dialogWidth,
             height: dialogHeight,
@@ -879,183 +895,200 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
               minHeight: 350,
             ),
             padding: const EdgeInsets.all(24.0),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Add New Order',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                isclient
-                    ? SizedBox()
-                    : TypeAheadField<String>(
-                        builder: (context, controller, focusNode) {
-                          return TextField(
-                            controller: controller,
-                            focusNode: focusNode,
-                            decoration: const InputDecoration(
-                              labelText: 'Client',
-                              prefixIcon: Icon(Icons.person),
-                              border: OutlineInputBorder(),
-                            ),
-                            onChanged: (value) {
-                              clientController.text = value;
-                            },
-                          );
-                        },
-                        suggestionsCallback: (pattern) async {
-                          if (pattern.isEmpty) return [];
-                          try {
-                            final prefs = await SharedPreferences.getInstance();
-                            final token = prefs.getString('auth_token') ?? '';
-                            
-                            final response = await http.get(
-                              Uri.parse(
-                                'http://92.222.248.113:3000/api/v1/clients/search?term=$pattern',
-                              ),
-                              headers: {
-                                'Authorization': 'Bearer $token',
-                                'Content-Type': 'application/json',
-                              },
-                            );
-                            if (response.statusCode == 200) {
-                              final List<dynamic> clientsJson = jsonDecode(
-                                response.body,
-                              );
-                              clientsMap = {
-                                for (var client in clientsJson)
-                                  client['clientName']: client['clientsID'],
-                              };
-                              return clientsMap.keys.toList();
-                            } else {
-                              print('Client search failed: ${response.statusCode}');
-                              return [];
-                            }
-                          } catch (e) {
-                            print('Client search error: $e');
-                            return [];
-                          }
-                        },
-                        itemBuilder: (context, String suggestion) =>
-                            ListTile(title: Text(suggestion)),
-                        onSelected: (String suggestion) {
-                          clientController.text = suggestion;
-                          selectedClientName = suggestion;
-                        },
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Add New Order',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
                       ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 16),
-                buildMultiProductInput(context),
-                const SizedBox(height: 16),
-                        TextFormField(
-                          controller: numberController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Number'),
-                        ),
-                      ],
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          isclient
+                              ? SizedBox()
+                              : TypeAheadField<String>(
+                                  builder: (context, controller, focusNode) {
+                                    return TextField(
+                                      controller: controller,
+                                      focusNode: focusNode,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Client',
+                                        prefixIcon: Icon(Icons.person),
+                                        border: OutlineInputBorder(),
+                                      ),
+                                      onChanged: (value) {
+                                        clientController.text = value;
+                                      },
+                                    );
+                                  },
+                                  suggestionsCallback: (pattern) async {
+                                    if (pattern.isEmpty) return [];
+                                    try {
+                                      final prefs =
+                                          await SharedPreferences.getInstance();
+                                      final token =
+                                          prefs.getString('auth_token') ?? '';
+
+                                      final response = await http.get(
+                                        Uri.parse(
+                                          'http://92.222.248.113:3000/api/v1/clients/search?term=$pattern',
+                                        ),
+                                        headers: {
+                                          'Authorization': 'Bearer $token',
+                                          'Content-Type': 'application/json',
+                                        },
+                                      );
+                                      if (response.statusCode == 200) {
+                                        final List<dynamic> clientsJson =
+                                            jsonDecode(response.body);
+                                        clientsMap = {
+                                          for (var client in clientsJson)
+                                            client['clientName']:
+                                                client['clientsID'],
+                                        };
+                                        return clientsMap.keys.toList();
+                                      } else {
+                                        print(
+                                          'Client search failed: ${response.statusCode}',
+                                        );
+                                        return [];
+                                      }
+                                    } catch (e) {
+                                      print('Client search error: $e');
+                                      return [];
+                                    }
+                                  },
+                                  itemBuilder: (context, String suggestion) =>
+                                      ListTile(title: Text(suggestion)),
+                                  onSelected: (String suggestion) {
+                                    clientController.text = suggestion;
+                                    selectedClientName = suggestion;
+                                  },
+                                ),
+                          const SizedBox(height: 16),
+                          buildMultiProductInput(context),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: numberController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Number',
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 16),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      final prefs = await SharedPreferences.getInstance();
-                      final token = prefs.getString('auth_token') ?? '';
-                      final payload = decodeJwtPayload(token);
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final prefs = await SharedPreferences.getInstance();
+                        final token = prefs.getString('auth_token') ?? '';
+                        final payload = decodeJwtPayload(token);
 
-                      if (_formKey.currentState!.validate()) {
-                        if (selectedProducts.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("Please add at least one product")),
-                          );
-                          return;
-                        }
-
-                        final clientId = clientsMap[selectedClientName];
-
-                        for (var item in selectedProducts) {
-                          final product = item['product'];
-                          final quantity = item['quantity'];
-                          final unitPrice = item['unitPrice'];
-
-                          if (quantity <= 0) continue;
-
-                          final response = await http.post(
-                            Uri.parse('http://92.222.248.113:3000/api/v1/commands'),
-                            headers: {
-                              'Content-Type': 'application/json',
-                              'Authorization': 'Bearer $token',
-                            },
-                            body: jsonEncode({
-                              'operator': product,
-                              'amount': quantity,
-                              'ClientsID': isclient ? payload['clid'] : clientId,
-                              'isValidated': 'En Attente',
-                              'pourcentage':
-                                  '${unitPrice}%', // Use initial price as percentage
-                              'number': numberController.text,
-                            }),
-                          );
-
-                          if (response.statusCode == 201 ||
-                              response.statusCode == 200) {
-                            // Refresh the current page orders instead of modifying local state
-                            await _fetchWithCurrentFilters(page: _currentPage);
+                        if (_formKey.currentState!.validate()) {
+                          if (selectedProducts.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  "Please add at least one product",
+                                ),
+                              ),
+                            );
+                            return;
                           }
-                        }
 
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              "${selectedProducts.length} Orders created successfully",
+                          final clientId = clientsMap[selectedClientName];
+
+                          for (var item in selectedProducts) {
+                            final product = item['product'];
+                            final quantity = item['quantity'];
+                            final unitPrice = item['unitPrice'];
+
+                            if (quantity <= 0) continue;
+
+                            final response = await http.post(
+                              Uri.parse(
+                                'http://92.222.248.113:3000/api/v1/commands',
+                              ),
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': 'Bearer $token',
+                              },
+                              body: jsonEncode({
+                                'operator': product,
+                                'amount': quantity,
+                                'ClientsID': isclient
+                                    ? payload['clid']
+                                    : clientId,
+                                'isValidated': 'En Attente',
+                                'pourcentage':
+                                    '${unitPrice}%', // Use initial price as percentage
+                                'number': numberController.text,
+                              }),
+                            );
+
+                            if (response.statusCode == 201 ||
+                                response.statusCode == 200) {
+                              // Refresh the current page orders instead of modifying local state
+                              await _fetchWithCurrentFilters(
+                                page: _currentPage,
+                              );
+                            }
+                          }
+
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                "${selectedProducts.length} Orders created successfully",
+                              ),
                             ),
-                          ),
-                        );
-                        Navigator.pop(context);
-                      }
-                    },
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade600,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                          );
+                          Navigator.pop(context);
+                        }
+                      },
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade600,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
-          )); // Close Container
+        ); // Close Container
       }, // Close builder function
     ); // Close showDialog
   }
@@ -1212,9 +1245,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                           suggestionsCallback: (pattern) async {
                             if (pattern.isEmpty) return [];
                             try {
-                              final prefs = await SharedPreferences.getInstance();
+                              final prefs =
+                                  await SharedPreferences.getInstance();
                               final token = prefs.getString('auth_token') ?? '';
-                              
+
                               final response = await http.get(
                                 Uri.parse(
                                   'http://92.222.248.113:3000/api/v1/clients/search?term=$pattern',
@@ -1234,7 +1268,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                 };
                                 return CreateClientsMap.keys.toList();
                               } else {
-                                print('Client search failed: ${response.statusCode}');
+                                print(
+                                  'Client search failed: ${response.statusCode}',
+                                );
                                 return [];
                               }
                             } catch (e) {
@@ -1625,10 +1661,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 1,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         leading: Builder(
           builder: (BuildContext context) {
             return IconButton(
@@ -1647,7 +1682,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
             const SizedBox(width: 8),
             Text(
               'Commandes EST STAR',
-              style: TextStyle(
+              style: GoogleFonts.poppins(
                 fontWeight: FontWeight.w600,
                 color: Colors.red.shade700,
               ),
@@ -1696,449 +1731,370 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       drawer: AppDrawer(
         orders: _currentPageOrders,
       ), // <-- Use the new shared drawer here
-      body: Column(
-        children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              if (constraints.maxWidth > 1400) {
-                return Card(
-                  margin: const EdgeInsets.all(16.0),
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      children: [
-                        // Header Row
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.filter_list,
-                              color: Colors.blue.shade600,
-                              size: 28,
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'Filtres et Actions',
-                              style: Theme.of(context).textTheme.headlineSmall
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                            const Spacer(),
-                            Image.asset(
-                              'assets/images/my_logo.png',
-                              fit: BoxFit.contain,
-                              width: 60,
-                              height: 60,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        // Filters Row
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            Expanded(
-                              flex: 2,
-                              child: TextField(
-                                decoration: InputDecoration(
-                                  labelText: 'Rechercher par client',
-                                  prefixIcon: const Icon(Icons.search),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFFFFEBEE), // Very light red/pink
+              Color(0xFFFFCDD2), // Light red/pink
+              Color(0xFFEF9A9A), // Soft red
+            ],
+          ),
+        ),
+        child: Column(
+          children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth > 1400) {
+                  return Card(
+                    margin: const EdgeInsets.all(8.0),
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Column(
+                        children: [
+                          // Filters Row
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              Expanded(
+                                flex: 2,
+                                child: TextField(
+                                  decoration: InputDecoration(
+                                    labelText: 'Rechercher par client',
+                                    prefixIcon: const Icon(
+                                      Icons.search,
+                                      size: 18,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.grey.shade50,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
                                   ),
-                                  filled: true,
-                                  fillColor: Colors.grey.shade50,
+                                  onChanged: _onSearchChanged,
                                 ),
-                                onChanged: _onSearchChanged,
                               ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              flex: 2,
-                              child: Container(
-                                height: 56,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: Colors.grey.shade300,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 2,
+                                child: Container(
+                                  height: 40,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Center(child: buildProductFilter()),
                                 ),
-                                child: Center(child: buildProductFilter()),
                               ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              flex: 2,
-                              child: Container(
-                                height: 56,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: Colors.grey.shade300,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 2,
+                                child: Container(
+                                  height: 40,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Center(
-                                  child: DropdownButton<String>(
-                                    value: selectedState,
-                                    hint: const Text("Filtrer par État"),
-                                    underline: Container(),
-                                    isExpanded: true,
-                                    items:
-                                        [
-                                              'En Attente',
-                                              'Effectué',
-                                              'Rejeté',
-                                              'Numéro Incorrecte',
-                                              'Problème Solde',
-                                            ]
-                                            .map(
-                                              (state) => DropdownMenuItem(
-                                                value: state,
-                                                child: Text(state),
-                                              ),
-                                            )
-                                            .toList(),
-                                    onChanged: (value) {
-                                      setState(() => selectedState = value);
-                                      _applyFiltersAndRefresh();
-                                    },
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Center(
+                                    child: DropdownButton<String>(
+                                      value: selectedState,
+                                      hint: const Text("Filtrer par État"),
+                                      underline: Container(),
+                                      isExpanded: true,
+                                      items:
+                                          [
+                                                'En Attente',
+                                                'Effectué',
+                                                'Rejeté',
+                                                'Numéro Incorrecte',
+                                                'Problème Solde',
+                                              ]
+                                              .map(
+                                                (state) => DropdownMenuItem(
+                                                  value: state,
+                                                  child: Text(state),
+                                                ),
+                                              )
+                                              .toList(),
+                                      onChanged: (value) {
+                                        setState(() => selectedState = value);
+                                        _applyFiltersAndRefresh();
+                                      },
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        // Action Buttons
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          alignment: WrapAlignment.center,
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: () async {
-                                final picked = await showDateRangePicker(
-                                  context: context,
-                                  firstDate: DateTime(2020),
-                                  lastDate: DateTime(2100),
-                                );
-                                if (picked != null) {
-                                  setState(() => selectedDateRange = picked);
-                                  _applyFiltersAndRefresh();
-                                }
-                              },
-                              icon: const Icon(Icons.date_range, size: 18),
-                              label: const Text('Filtre Date'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue.shade600,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: _showAddOrderDialog,
-                              icon: const Icon(Icons.add, size: 18),
-                              label: const Text('Ajouter Commande'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green.shade600,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                setState(() {
-                                  searchQuery = '';
-                                  selectedDateRange = null;
-                                  selectedState = null;
-                                  productCheckboxes.updateAll(
-                                    (key, value) => true,
-                                  );
-                                });
-                                _applyFiltersAndRefresh();
-                              },
-                              icon: const Icon(Icons.refresh, size: 18),
-                              label: const Text('Réinitialiser'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.orange.shade600,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: () =>
-                                  exportToExcel(_currentPageOrders),
-                              icon: const Icon(Icons.download, size: 18),
-                              label: const Text('Exporter Excel'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.teal.shade600,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                            ),
-                            if (isAdminn || isSuserr)
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          // Action Buttons
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            alignment: WrapAlignment.center,
+                            children: [
                               ElevatedButton.icon(
-                                icon: const Icon(Icons.person_add, size: 18),
-                                label: const Text('Créer Utilisateur'),
-                                onPressed: () => _showCreateUserDialog(context),
+                                onPressed: () async {
+                                  final picked = await showDateRangePicker(
+                                    context: context,
+                                    firstDate: DateTime(2020),
+                                    lastDate: DateTime(2100),
+                                  );
+                                  if (picked != null) {
+                                    setState(() => selectedDateRange = picked);
+                                    _applyFiltersAndRefresh();
+                                  }
+                                },
+                                icon: const Icon(Icons.date_range, size: 14),
+                                label: const Text(
+                                  'Date',
+                                  style: TextStyle(fontSize: 12),
+                                ),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.purple.shade600,
+                                  backgroundColor: Colors.blue.shade600,
                                   foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
+                                    horizontal: 12,
+                                    vertical: 6,
                                   ),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: BorderRadius.circular(6),
                                   ),
                                 ),
                               ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              } else {
-                return Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Image.asset(
-                            'assets/images/my_logo.png',
-                            fit: BoxFit.contain,
-                            width: 100,
-                            height: 100,
-                          ),
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _isMobileMenuOpen = !_isMobileMenuOpen;
-                              });
-                            },
-                            child: Container(
-                              padding: EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.blueGrey,
-                                borderRadius: BorderRadius.circular(12),
+                              ElevatedButton.icon(
+                                onPressed: _showAddOrderDialog,
+                                icon: const Icon(Icons.add, size: 14),
+                                label: const Text(
+                                  'Ajouter',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green.shade600,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
                               ),
-                              child: Icon(
-                                _isMobileMenuOpen
-                                    ? Icons.close
-                                    : Icons.filter_list,
-                                color: Colors.white,
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    searchQuery = '';
+                                    selectedDateRange = null;
+                                    selectedState = null;
+                                    productCheckboxes.updateAll(
+                                      (key, value) => true,
+                                    );
+                                  });
+                                  _applyFiltersAndRefresh();
+                                },
+                                icon: const Icon(Icons.refresh, size: 14),
+                                label: const Text(
+                                  'Reset',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.orange.shade600,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
                               ),
-                            ),
+                              ElevatedButton.icon(
+                                onPressed: () =>
+                                    exportToExcel(_currentPageOrders),
+                                icon: const Icon(Icons.download, size: 14),
+                                label: const Text(
+                                  'Excel',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.teal.shade600,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
+                              ),
+                              if (isAdminn || isSuserr)
+                                ElevatedButton.icon(
+                                  icon: const Icon(Icons.person_add, size: 14),
+                                  label: const Text(
+                                    'Utilisateur',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                  onPressed: () =>
+                                      _showCreateUserDialog(context),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.purple.shade600,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: TextField(
-                          decoration: const InputDecoration(
-                            labelText: 'Rechercher par client',
-                            prefixIcon: Icon(Icons.search),
-                            border: OutlineInputBorder(),
-                          ),
-                          onChanged: _onSearchChanged,
-                        ),
-                      ),
-                      AnimatedCrossFade(
-                        firstChild: Container(height: 0),
-                        secondChild: Card(
-                          margin: const EdgeInsets.symmetric(vertical: 16),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(child: buildProductFilter()),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: DropdownButton<String>(
-                                        value: selectedState,
-                                        hint: const Text("Filtrer État"),
-                                        isExpanded: true,
-                                        items:
-                                            [
-                                                  'En Attente',
-                                                  'Effectué',
-                                                  'Rejeté',
-                                                  'Numéro Incorrecte',
-                                                  'Problème Solde',
-                                                ]
-                                                .map(
-                                                  (state) => DropdownMenuItem(
-                                                    value: state,
-                                                    child: Text(state),
-                                                  ),
-                                                )
-                                                .toList(),
-                                        onChanged: (value) {
-                                          setState(() => selectedState = value);
-                                          _applyFiltersAndRefresh();
-                                        },
-                                      ),
-                                    ),
-                                  ],
+                    ),
+                  );
+                } else {
+                  return Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Image.asset(
+                              'assets/images/my_logo.png',
+                              fit: BoxFit.contain,
+                              width: 100,
+                              height: 100,
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _isMobileMenuOpen = !_isMobileMenuOpen;
+                                });
+                              },
+                              child: Container(
+                                padding: EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.blueGrey,
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                                const SizedBox(height: 16),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  alignment: WrapAlignment.center,
-                                  children: [
-                                    ElevatedButton.icon(
-                                      onPressed: () async {
-                                        final picked =
-                                            await showDateRangePicker(
-                                              context: context,
-                                              firstDate: DateTime(2020),
-                                              lastDate: DateTime(2100),
+                                child: Icon(
+                                  _isMobileMenuOpen
+                                      ? Icons.close
+                                      : Icons.filter_list,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: TextField(
+                            decoration: const InputDecoration(
+                              labelText: 'Rechercher par client',
+                              prefixIcon: Icon(Icons.search),
+                              border: OutlineInputBorder(),
+                            ),
+                            onChanged: _onSearchChanged,
+                          ),
+                        ),
+                        AnimatedCrossFade(
+                          firstChild: Container(height: 0),
+                          secondChild: Card(
+                            margin: const EdgeInsets.symmetric(vertical: 16),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(child: buildProductFilter()),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: DropdownButton<String>(
+                                          value: selectedState,
+                                          hint: const Text("Filtrer État"),
+                                          isExpanded: true,
+                                          items:
+                                              [
+                                                    'En Attente',
+                                                    'Effectué',
+                                                    'Rejeté',
+                                                    'Numéro Incorrecte',
+                                                    'Problème Solde',
+                                                  ]
+                                                  .map(
+                                                    (state) => DropdownMenuItem(
+                                                      value: state,
+                                                      child: Text(state),
+                                                    ),
+                                                  )
+                                                  .toList(),
+                                          onChanged: (value) {
+                                            setState(
+                                              () => selectedState = value,
                                             );
-                                        if (picked != null) {
-                                          setState(
-                                            () => selectedDateRange = picked,
-                                          );
-                                          _applyFiltersAndRefresh();
-                                        }
-                                      },
-                                      icon: const Icon(
-                                        Icons.date_range,
-                                        size: 16,
-                                      ),
-                                      label: const Text('Date'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.blue.shade600,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 8,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
+                                            _applyFiltersAndRefresh();
+                                          },
                                         ),
                                       ),
-                                    ),
-                                    ElevatedButton.icon(
-                                      onPressed: _showAddOrderDialog,
-                                      icon: const Icon(Icons.add, size: 16),
-                                      label: const Text('Ajouter'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green.shade600,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 8,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    ElevatedButton.icon(
-                                      onPressed: () {
-                                        setState(() {
-                                          searchQuery = '';
-                                          selectedDateRange = null;
-                                          selectedState = null;
-                                          productCheckboxes.updateAll(
-                                            (key, value) => true,
-                                          );
-                                        });
-                                        _applyFiltersAndRefresh();
-                                      },
-                                      icon: const Icon(Icons.refresh, size: 16),
-                                      label: const Text('Reset'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.orange.shade600,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 8,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    ElevatedButton.icon(
-                                      onPressed: () =>
-                                          exportToExcel(_currentPageOrders),
-                                      icon: const Icon(
-                                        Icons.download,
-                                        size: 16,
-                                      ),
-                                      label: const Text('Excel'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.teal.shade600,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 8,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    if (isAdminn || isSuserr)
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    alignment: WrapAlignment.center,
+                                    children: [
                                       ElevatedButton.icon(
+                                        onPressed: () async {
+                                          final picked =
+                                              await showDateRangePicker(
+                                                context: context,
+                                                firstDate: DateTime(2020),
+                                                lastDate: DateTime(2100),
+                                              );
+                                          if (picked != null) {
+                                            setState(
+                                              () => selectedDateRange = picked,
+                                            );
+                                            _applyFiltersAndRefresh();
+                                          }
+                                        },
                                         icon: const Icon(
-                                          Icons.person_add,
+                                          Icons.date_range,
                                           size: 16,
                                         ),
-                                        label: const Text('Utilisateur'),
-                                        onPressed: () =>
-                                            _showCreateUserDialog(context),
+                                        label: const Text('Date'),
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor:
-                                              Colors.purple.shade600,
+                                          backgroundColor: Colors.blue.shade600,
                                           foregroundColor: Colors.white,
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 12,
@@ -2151,510 +2107,733 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                           ),
                                         ),
                                       ),
-                                  ],
-                                ),
-                              ],
+                                      ElevatedButton.icon(
+                                        onPressed: _showAddOrderDialog,
+                                        icon: const Icon(Icons.add, size: 16),
+                                        label: const Text('Ajouter'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              Colors.green.shade600,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          setState(() {
+                                            searchQuery = '';
+                                            selectedDateRange = null;
+                                            selectedState = null;
+                                            productCheckboxes.updateAll(
+                                              (key, value) => true,
+                                            );
+                                          });
+                                          _applyFiltersAndRefresh();
+                                        },
+                                        icon: const Icon(
+                                          Icons.refresh,
+                                          size: 16,
+                                        ),
+                                        label: const Text('Reset'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              Colors.orange.shade600,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      ElevatedButton.icon(
+                                        onPressed: () =>
+                                            exportToExcel(_currentPageOrders),
+                                        icon: const Icon(
+                                          Icons.download,
+                                          size: 16,
+                                        ),
+                                        label: const Text('Excel'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.teal.shade600,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (isAdminn || isSuserr)
+                                        ElevatedButton.icon(
+                                          icon: const Icon(
+                                            Icons.person_add,
+                                            size: 16,
+                                          ),
+                                          label: const Text('Utilisateur'),
+                                          onPressed: () =>
+                                              _showCreateUserDialog(context),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor:
+                                                Colors.purple.shade600,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 8,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
+                          crossFadeState: _isMobileMenuOpen
+                              ? CrossFadeState.showSecond
+                              : CrossFadeState.showFirst,
+                          duration: const Duration(milliseconds: 300),
                         ),
-                        crossFadeState: _isMobileMenuOpen
-                            ? CrossFadeState.showSecond
-                            : CrossFadeState.showFirst,
-                        duration: const Duration(milliseconds: 300),
-                      ),
-                    ],
-                  ));
-              }
-            },
-          ),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                if (constraints.maxWidth < 1000) {
-                  return Column(
-                    children: [
-                      Expanded(
-                        child: ListView.builder(
-                          itemCount: paginatedOrders.length,
-                          itemBuilder: (context, index) {
-                            final order = paginatedOrders[index];
-                            final realIndex = index;
-                            final price =
-                                10000 - (order['prixPercent'] / 100 * 10000);
-
-                            return Card(
-                              margin: const EdgeInsets.all(8),
-                              elevation: 3,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Client: ${order['client']}',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    Text('Produit: ${order['product']}'),
-                                    Text('Quantité: ${order['quantity']}'),
-                                    Text(
-                                      'Pourcentage %: ${order['prixPercent']}%',
-                                    ),
-                                    Text('Prix: ${price.toStringAsFixed(2)}'),
-                                    Row(
-                                      children: <Widget>[
-                                        const Text('Numero Telephone: '),
-                                        Expanded(
-                                          child: Text(
-                                            order['number']?.toString() ?? '',
-                                          ),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.copy,
-                                            size: 18,
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
-                                          tooltip: 'Copy number',
-                                          onPressed: () {
-                                            final numberToCopy =
-                                                order['number']?.toString() ??
-                                                '';
-                                            if (numberToCopy.isNotEmpty) {
-                                              Clipboard.setData(
-                                                ClipboardData(
-                                                  text: numberToCopy,
-                                                ),
-                                              );
-                                              ScaffoldMessenger.of(
-                                                context,
-                                              ).showSnackBar(
-                                                SnackBar(
-                                                  content: Text(
-                                                    'Numéro "$numberToCopy" copié!',
-                                                  ),
-                                                ),
-                                              );
-                                            } else {
-                                              ScaffoldMessenger.of(
-                                                context,
-                                              ).showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                    'Rien à copié!.',
-                                                  ),
-                                                ),
-                                              );
-                                            }
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                    Text(
-                                      'Etat Commande: ${order['state']}',
-                                      style: TextStyle(
-                                        color: _stateColor(order['state']),
-                                      ),
-                                    ),
-                                    Text('Crée Par: ${order['name']}'),
-                                    Text(
-                                      'Etat Val: ${order['accepted'] ?? false ? "Valide" : "Non Valide"}',
-                                      style: TextStyle(
-                                        color: (order['accepted'] ?? false)
-                                            ? Colors.green
-                                            : Colors.red,
-                                      ),
-                                    ),
-
-                                    Text('Accépté: ${order['acceptedBy']}'),
-                                    Text(
-                                      'Date: ${DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.parse(order['date']))}',
-                                    ),
-                                    const SizedBox(height: 8),
-                                    if (isAdminn)
-                                      Wrap(
-                                        alignment: WrapAlignment.end,
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.check,
-                                              color: Colors.green,
-                                            ),
-                                            onPressed: () => _changeOrderState(
-                                              realIndex,
-                                              'Effectué',
-                                            ),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.close,
-                                              color: Colors.red,
-                                            ),
-                                            onPressed: () => _changeOrderState(
-                                              realIndex,
-                                              'Rejeté',
-                                            ),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.phone_disabled,
-                                              color: Colors.red,
-                                            ),
-                                            onPressed: () => _changeOrderState(
-                                              realIndex,
-                                              'Numéro Incorrecte',
-                                            ),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.money_off_csred,
-                                              color: Colors.red,
-                                            ),
-                                            onPressed: () => _changeOrderState(
-                                              realIndex,
-                                              'Probléme Solde',
-                                            ),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.hourglass_bottom,
-                                              color: Colors.orange,
-                                            ),
-                                            onPressed: () => _changeOrderState(
-                                              realIndex,
-                                              'En Attente',
-                                            ),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.edit,
-                                              color: Colors.blue,
-                                            ),
-                                            onPressed: () =>
-                                                _showEditDialog(realIndex),
-                                          ),
-                                          if (order['product'] == 'STORM STI')
-                                            IconButton(
-                                              icon: const Icon(
-                                                FontAwesomeIcons.whatsapp,
-                                                color: Colors.green,
-                                              ),
-                                              onPressed: () =>
-                                                  _sendOrderToWhatsApp(order),
-                                            ),
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.delete,
-                                              color: Colors.black,
-                                            ),
-                                            onPressed: () =>
-                                                _confirmDeleteOrder(realIndex),
-                                          ),
-                                        ],
-                                      ),
-                                    if (isSuserr)
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.end,
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.check,
-                                              color: Colors.green,
-                                            ),
-                                            onPressed: () =>
-                                                handleAccept(true, realIndex),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.close,
-                                              color: Colors.red,
-                                            ),
-                                            onPressed: () =>
-                                                handleAccept(false, realIndex),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.edit,
-                                              color: Colors.blue,
-                                            ),
-                                            onPressed: () =>
-                                                _showEditDialog(realIndex),
-                                          ),
-                                        ],
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }, // End of itemBuilder function
-                        ), // End of ListView.builder
-                      ), // End of Expanded
-                      _buildPaginationControls(),
-                    ],
-                  );
-                } else {
-                  return Column(
-                    children: [
-                      Expanded(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.vertical,
-                          child: DataTable(
-                            columnSpacing: 5,
-                            columns: [
-                              _buildSortableColumn('Client', 'client'),
-                              _buildSortableColumn('Produit', 'product'),
-                              _buildSortableColumn('Quantité', 'quantity'),
-                              _buildSortableColumn('PU %', 'prixPercent'),
-                              const DataColumn(label: Text('Prix')),
-                              _buildSortableColumn('Numéro ', 'number'),
-                              _buildSortableColumn('Etat C', 'state'),
-                              _buildSortableColumn('Crée Par', 'name'),
-                              _buildSortableColumn('Etat Val', 'accepted'),
-                              _buildSortableColumn('Accépté', 'acceptedBy'),
-                              _buildSortableColumn('Date', 'date'),
-                              if (isAdminn || isSuserr)
-                                const DataColumn(label: Text('Actions')),
-                            ],
-                            rows: List.generate(paginatedOrders.length, (
-                              index,
-                            ) {
-                              final order = paginatedOrders[index];
-                              final realIndex = index;
-                              final calcPrice =
-                                  10000 - (order['prixPercent'] / 100 * 10000);
-
-                              return DataRow(
-                                cells: [
-                                  DataCell(Text(order['client'] ?? '')),
-                                  DataCell(Text(order['product'])),
-                                  DataCell(Text('${order['quantity']}')),
-                                  DataCell(Text('${order['prixPercent']}%')),
-                                  DataCell(Text(calcPrice.toStringAsFixed(2))),
-                                  DataCell(
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(order['number'] ?? ''),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.copy,
-                                            size: 18,
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
-                                          onPressed: () {
-                                            final numberToCopy =
-                                                order['number']?.toString() ??
-                                                '';
-                                            if (numberToCopy.isNotEmpty) {
-                                              Clipboard.setData(
-                                                ClipboardData(
-                                                  text: numberToCopy,
-                                                ),
-                                              );
-                                              ScaffoldMessenger.of(
-                                                context,
-                                              ).showSnackBar(
-                                                SnackBar(
-                                                  content: Text(
-                                                    'Number "$numberToCopy" copied!',
-                                                  ),
-                                                ),
-                                              );
-                                            } else {
-                                              ScaffoldMessenger.of(
-                                                context,
-                                              ).showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                    'Nothing to copy.',
-                                                  ),
-                                                ),
-                                              );
-                                            }
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Text(
-                                      order['state'],
-                                      style: TextStyle(
-                                        color: _stateColor(order['state']),
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(Text(order['name'])),
-                                  DataCell(
-                                    (order['accepted'] ?? false)
-                                        ? const Text(
-                                            "Valide",
-                                            style: TextStyle(
-                                              color: Colors.green,
-                                            ),
-                                          )
-                                        : const Text(
-                                            "Non Valide",
-                                            style: TextStyle(color: Colors.red),
-                                          ),
-                                  ),
-                                  DataCell(Text(order['acceptedBy'] ?? " ")),
-                                  DataCell(
-                                    Text(
-                                      DateFormat(
-                                        'dd/MM/yyyy HH:mm:ss',
-                                      ).format(DateTime.parse(order['date'])),
-                                    ),
-                                  ),
-                                  if (isAdminn)
-                                    DataCell(
-                                      SingleChildScrollView(
-                                        scrollDirection: Axis.horizontal,
-                                        child: Row(
-                                          children: [
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.check,
-                                                color: Colors.green,
-                                              ),
-                                              onPressed: () =>
-                                                  _changeOrderState(
-                                                    realIndex,
-                                                    'Effectué',
-                                                  ),
-                                            ),
-                                            const SizedBox(width:  6),
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.close,
-                                                color: Colors.red,
-                                              ),
-                                              onPressed: () =>
-                                                  _changeOrderState(
-                                                    realIndex,
-                                                    'Rejeté',
-                                                  ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.phone_disabled,
-                                                color: Colors.red,
-                                              ),
-                                              onPressed: () =>
-                                                  _changeOrderState(
-                                                    realIndex,
-                                                    'Numéro Incorrecte',
-                                                  ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.money_off_csred,
-                                                color: Colors.red,
-                                              ),
-                                              onPressed: () =>
-                                                  _changeOrderState(
-                                                    realIndex,
-                                                    'Probléme Solde',
-                                                  ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.hourglass_bottom,
-                                                color: Colors.orange,
-                                              ),
-                                              onPressed: () =>
-                                                  _changeOrderState(
-                                                    realIndex,
-                                                    'En Attente',
-                                                  ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.edit,
-                                                color: Colors.blue,
-                                              ),
-                                              onPressed: () =>
-                                                  _showEditDialog(realIndex),
-                                            ),
-                                            if (order['product'] == 'STORM STI')
-                                              IconButton(
-                                                icon: const Icon(
-                                                  FontAwesomeIcons.whatsapp,
-                                                  color: Colors.green,
-                                                ),
-                                                onPressed: () =>
-                                                    _sendOrderToWhatsApp(order),
-                                              ),
-                                            const SizedBox(width: 6),
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.delete,
-                                                color: Colors.black,
-                                              ),
-                                              onPressed: () =>
-                                                  _confirmDeleteOrder(realIndex),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  if (isSuserr)
-                                    DataCell(
-                                      Row(
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.check,
-                                              color: Colors.green,
-                                            ),
-                                            onPressed: () =>
-                                                handleAccept(true, realIndex),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.close,
-                                              color: Colors.red,
-                                            ),
-                                            onPressed: () =>
-                                                handleAccept(false, realIndex),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.edit,
-                                              color: Colors.blue,
-                                            ),
-                                            onPressed: () =>
-                                                _showEditDialog(realIndex),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                ],
-                              );
-                            }),
-                          ),
-                        ),
-                      ),
-                      _buildPaginationControls(),
-                    ],
+                      ],
+                    ),
                   );
                 }
               },
             ),
-          ),
-        ],
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth < 1000) {
+                    return Column(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            margin: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.1),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: ListView.builder(
+                              padding: const EdgeInsets.all(8),
+                              itemCount: paginatedOrders.length,
+                              itemBuilder: (context, index) {
+                                final order = paginatedOrders[index];
+                                final realIndex = index;
+                                final price =
+                                    10000 -
+                                    (order['prixPercent'] / 100 * 10000);
+
+                                return Card(
+                                  margin: const EdgeInsets.symmetric(
+                                    vertical: 6,
+                                    horizontal: 4,
+                                  ),
+                                  elevation: 4,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(16),
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Colors.white,
+                                          Colors.grey.shade50,
+                                        ],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Client: ${order['client']}',
+                                            style: GoogleFonts.poppins(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                              color: Colors.grey.shade800,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'Produit: ${order['product']}',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 14,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                          ),
+                                          Text(
+                                            'Quantité: ${order['quantity']}',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.green.shade700,
+                                            ),
+                                          ),
+                                          Text(
+                                            'Pourcentage %: ${order['prixPercent']}%',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 14,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                          ),
+                                          Text(
+                                            'Prix: ${price.toStringAsFixed(2)}',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 14,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                          ),
+                                          Row(
+                                            children: <Widget>[
+                                              const Text('Numero Telephone: '),
+                                              Expanded(
+                                                child: Text(
+                                                  order['number']?.toString() ??
+                                                      '',
+                                                ),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(
+                                                  Icons.copy,
+                                                  size: 18,
+                                                ),
+                                                padding: EdgeInsets.zero,
+                                                constraints:
+                                                    const BoxConstraints(),
+                                                tooltip: 'Copy number',
+                                                onPressed: () {
+                                                  final numberToCopy =
+                                                      order['number']
+                                                          ?.toString() ??
+                                                      '';
+                                                  if (numberToCopy.isNotEmpty) {
+                                                    Clipboard.setData(
+                                                      ClipboardData(
+                                                        text: numberToCopy,
+                                                      ),
+                                                    );
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          'Numéro "$numberToCopy" copié!',
+                                                        ),
+                                                      ),
+                                                    );
+                                                  } else {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text(
+                                                          'Rien à copié!.',
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                          Text(
+                                            'Etat Commande: ${order['state']}',
+                                            style: TextStyle(
+                                              color: _stateColor(
+                                                order['state'],
+                                              ),
+                                            ),
+                                          ),
+                                          Text('Crée Par: ${order['name']}'),
+                                          Text(
+                                            'Etat Val: ${order['accepted'] ?? false ? "Valide" : "Non Valide"}',
+                                            style: TextStyle(
+                                              color:
+                                                  (order['accepted'] ?? false)
+                                                  ? Colors.green
+                                                  : Colors.red,
+                                            ),
+                                          ),
+
+                                          Text(
+                                            'Accépté: ${order['acceptedBy']}',
+                                          ),
+                                          Text(
+                                            'Date: ${DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.parse(order['date']))}',
+                                          ),
+                                          const SizedBox(height: 8),
+                                          if (isAdminn)
+                                            Wrap(
+                                              alignment: WrapAlignment.end,
+                                              children: [
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.check,
+                                                    color: Colors.green,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _changeOrderState(
+                                                        realIndex,
+                                                        'Effectué',
+                                                      ),
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.close,
+                                                    color: Colors.red,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _changeOrderState(
+                                                        realIndex,
+                                                        'Rejeté',
+                                                      ),
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.phone_disabled,
+                                                    color: Colors.red,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _changeOrderState(
+                                                        realIndex,
+                                                        'Numéro Incorrecte',
+                                                      ),
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.money_off_csred,
+                                                    color: Colors.red,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _changeOrderState(
+                                                        realIndex,
+                                                        'Probléme Solde',
+                                                      ),
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.hourglass_bottom,
+                                                    color: Colors.orange,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _changeOrderState(
+                                                        realIndex,
+                                                        'En Attente',
+                                                      ),
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.edit,
+                                                    color: Colors.blue,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _showEditDialog(
+                                                        realIndex,
+                                                      ),
+                                                ),
+                                                if (order['product'] ==
+                                                    'STORM STI')
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                      FontAwesomeIcons.whatsapp,
+                                                      color: Colors.green,
+                                                    ),
+                                                    onPressed: () =>
+                                                        _sendOrderToWhatsApp(
+                                                          order,
+                                                        ),
+                                                  ),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.delete,
+                                                    color: Colors.black,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _confirmDeleteOrder(
+                                                        realIndex,
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
+                                          if (isSuserr)
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.end,
+                                              children: [
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.check,
+                                                    color: Colors.green,
+                                                  ),
+                                                  onPressed: () => handleAccept(
+                                                    true,
+                                                    realIndex,
+                                                  ),
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.close,
+                                                    color: Colors.red,
+                                                  ),
+                                                  onPressed: () => handleAccept(
+                                                    false,
+                                                    realIndex,
+                                                  ),
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.edit,
+                                                    color: Colors.blue,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _showEditDialog(
+                                                        realIndex,
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }, // End of itemBuilder function
+                            ), // End of ListView.builder
+                          ), // End of Container
+                        ), // End of Expanded
+                        _buildPaginationControls(),
+                      ],
+                    );
+                  } else {
+                    return Column(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            margin: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.1),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.vertical,
+                              child: DataTable(
+                                columnSpacing: 5,
+                                columns: [
+                                  _buildSortableColumn('Client', 'client'),
+                                  _buildSortableColumn('Produit', 'product'),
+                                  _buildSortableColumn('Quantité', 'quantity'),
+                                  _buildSortableColumn('PU %', 'prixPercent'),
+                                  const DataColumn(label: Text('Prix')),
+                                  _buildSortableColumn('Numéro ', 'number'),
+                                  _buildSortableColumn('Etat C', 'state'),
+                                  _buildSortableColumn('Crée Par', 'name'),
+                                  _buildSortableColumn('Etat Val', 'accepted'),
+                                  _buildSortableColumn('Accépté', 'acceptedBy'),
+                                  _buildSortableColumn('Date', 'date'),
+                                  if (isAdminn || isSuserr)
+                                    const DataColumn(label: Text('Actions')),
+                                ],
+                                rows: List.generate(paginatedOrders.length, (
+                                  index,
+                                ) {
+                                  final order = paginatedOrders[index];
+                                  final realIndex = index;
+                                  final calcPrice =
+                                      10000 -
+                                      (order['prixPercent'] / 100 * 10000);
+
+                                  return DataRow(
+                                    cells: [
+                                      DataCell(Text(order['client'] ?? '')),
+                                      DataCell(Text(order['product'])),
+                                      DataCell(Text('${order['quantity']}')),
+                                      DataCell(
+                                        Text('${order['prixPercent']}%'),
+                                      ),
+                                      DataCell(
+                                        Text(calcPrice.toStringAsFixed(2)),
+                                      ),
+                                      DataCell(
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                order['number'] ?? '',
+                                              ),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.copy,
+                                                size: 18,
+                                              ),
+                                              padding: EdgeInsets.zero,
+                                              constraints:
+                                                  const BoxConstraints(),
+                                              onPressed: () {
+                                                final numberToCopy =
+                                                    order['number']
+                                                        ?.toString() ??
+                                                    '';
+                                                if (numberToCopy.isNotEmpty) {
+                                                  Clipboard.setData(
+                                                    ClipboardData(
+                                                      text: numberToCopy,
+                                                    ),
+                                                  );
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
+                                                    SnackBar(
+                                                      content: Text(
+                                                        'Number "$numberToCopy" copied!',
+                                                      ),
+                                                    ),
+                                                  );
+                                                } else {
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                        'Nothing to copy.',
+                                                      ),
+                                                    ),
+                                                  );
+                                                }
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          order['state'],
+                                          style: TextStyle(
+                                            color: _stateColor(order['state']),
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(Text(order['name'])),
+                                      DataCell(
+                                        (order['accepted'] ?? false)
+                                            ? const Text(
+                                                "Valide",
+                                                style: TextStyle(
+                                                  color: Colors.green,
+                                                ),
+                                              )
+                                            : const Text(
+                                                "Non Valide",
+                                                style: TextStyle(
+                                                  color: Colors.red,
+                                                ),
+                                              ),
+                                      ),
+                                      DataCell(
+                                        Text(order['acceptedBy'] ?? " "),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          DateFormat(
+                                            'dd/MM/yyyy HH:mm:ss',
+                                          ).format(
+                                            DateTime.parse(order['date']),
+                                          ),
+                                        ),
+                                      ),
+                                      if (isAdminn)
+                                        DataCell(
+                                          SingleChildScrollView(
+                                            scrollDirection: Axis.horizontal,
+                                            child: Row(
+                                              children: [
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.check,
+                                                    color: Colors.green,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _changeOrderState(
+                                                        realIndex,
+                                                        'Effectué',
+                                                      ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.close,
+                                                    color: Colors.red,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _changeOrderState(
+                                                        realIndex,
+                                                        'Rejeté',
+                                                      ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.phone_disabled,
+                                                    color: Colors.red,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _changeOrderState(
+                                                        realIndex,
+                                                        'Numéro Incorrecte',
+                                                      ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.money_off_csred,
+                                                    color: Colors.red,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _changeOrderState(
+                                                        realIndex,
+                                                        'Probléme Solde',
+                                                      ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.hourglass_bottom,
+                                                    color: Colors.orange,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _changeOrderState(
+                                                        realIndex,
+                                                        'En Attente',
+                                                      ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.edit,
+                                                    color: Colors.blue,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _showEditDialog(
+                                                        realIndex,
+                                                      ),
+                                                ),
+                                                if (order['product'] ==
+                                                    'STORM STI')
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                      FontAwesomeIcons.whatsapp,
+                                                      color: Colors.green,
+                                                    ),
+                                                    onPressed: () =>
+                                                        _sendOrderToWhatsApp(
+                                                          order,
+                                                        ),
+                                                  ),
+                                                const SizedBox(width: 6),
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.delete,
+                                                    color: Colors.black,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _confirmDeleteOrder(
+                                                        realIndex,
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      if (isSuserr)
+                                        DataCell(
+                                          Row(
+                                            children: [
+                                              IconButton(
+                                                icon: const Icon(
+                                                  Icons.check,
+                                                  color: Colors.green,
+                                                ),
+                                                onPressed: () => handleAccept(
+                                                  true,
+                                                  realIndex,
+                                                ),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(
+                                                  Icons.close,
+                                                  color: Colors.red,
+                                                ),
+                                                onPressed: () => handleAccept(
+                                                  false,
+                                                  realIndex,
+                                                ),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(
+                                                  Icons.edit,
+                                                  color: Colors.blue,
+                                                ),
+                                                onPressed: () =>
+                                                    _showEditDialog(realIndex),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  );
+                                }),
+                              ),
+                            ),
+                          ),
+                        ),
+                        _buildPaginationControls(),
+                      ],
+                    );
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2667,11 +2846,15 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           builder: (context) {
             TextEditingController searchController = TextEditingController();
             List<String> filteredProducts = productCheckboxes.keys.toList();
+            Map<String, bool> tempProductCheckboxes = Map.from(
+              productCheckboxes,
+            );
+
             return StatefulBuilder(
-              builder: (context, setState) {
+              builder: (context, setDialogState) {
                 void filterSearch(String query) {
-                  setState(() {
-                    filteredProducts = productCheckboxes.keys
+                  setDialogState(() {
+                    filteredProducts = tempProductCheckboxes.keys
                         .where(
                           (product) => product.toLowerCase().contains(
                             query.toLowerCase(),
@@ -2725,12 +2908,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                   product,
                                   style: TextStyle(fontSize: 12),
                                 ),
-                                value: productCheckboxes[product],
+                                value: tempProductCheckboxes[product],
                                 onChanged: (value) {
-                                  setState(() {
-                                    productCheckboxes[product] = value!;
+                                  setDialogState(() {
+                                    tempProductCheckboxes[product] = value!;
                                   });
-                                  _applyFiltersAndRefresh();
                                 },
                                 controlAffinity:
                                     ListTileControlAffinity.leading,
@@ -2744,25 +2926,47 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                           children: [
                             TextButton(
                               onPressed: () {
-                                setState(() {
-                                  productCheckboxes.updateAll(
+                                setDialogState(() {
+                                  tempProductCheckboxes.updateAll(
                                     (key, value) => true,
                                   );
                                 });
-                                _applyFiltersAndRefresh();
                               },
                               child: Text('Tout Sélectionner'),
                             ),
                             TextButton(
                               onPressed: () {
-                                setState(() {
-                                  productCheckboxes.updateAll(
+                                setDialogState(() {
+                                  tempProductCheckboxes.updateAll(
                                     (key, value) => false,
                                   );
                                 });
-                                _applyFiltersAndRefresh();
                               },
                               child: Text('Tout Désélectionner'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            TextButton(
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                              },
+                              child: Text('Annuler'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () {
+                                setState(() {
+                                  productCheckboxes = Map.from(
+                                    tempProductCheckboxes,
+                                  );
+                                });
+                                _applyFiltersAndRefresh();
+                                Navigator.of(context).pop();
+                              },
+                              child: Text('Appliquer'),
                             ),
                           ],
                         ),
