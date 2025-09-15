@@ -1,5 +1,7 @@
 import 'package:EstStarCommande/app_drawer.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'dart:ui';
 import 'package:intl/intl.dart';
 import 'package:open_file/open_file.dart';
 import 'dart:io';
@@ -14,7 +16,6 @@ import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, TargetPlatform;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:flutter/services.dart'; // For Clipboard
 import 'package:excel/excel.dart' as excel;
 import 'package:path/path.dart' as p;
 import 'package:google_fonts/google_fonts.dart';
@@ -61,6 +62,7 @@ String? selectedState;
 bool isAdminn = false;
 bool isSuserr = false;
 bool isclient = false;
+bool isDelegatee = false;
 bool showActions = false;
 bool _isMobileMenuOpen = false;
 bool isDropdownOpened = false;
@@ -104,12 +106,207 @@ isClient() async {
   return isSup;
 }
 
+isDelegue() async {
+  final prefs = await SharedPreferences.getInstance();
+  final token = prefs.getString('auth_token') ?? '';
+  final payload = decodeJwtPayload(token);
+  final isDelegue = payload['isDelegue'] == 1;
+  return isDelegue;
+}
+
+getUserRegion() async {
+  final prefs = await SharedPreferences.getInstance();
+  final token = prefs.getString('auth_token') ?? '';
+  final payload = decodeJwtPayload(token);
+  return payload['region']; // Assuming the region is stored in the JWT payload
+}
+
 bool isMobile() {
   return defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS;
 }
 
 DateTimeRange? selectedDateRange;
+
+// Separate widget for product search to prevent rebuild issues
+// Client Search Widget - Separate from dialog state
+class ClientSearchWidget extends StatefulWidget {
+  final Function(String clientName, String clientId) onClientSelected;
+
+  const ClientSearchWidget({Key? key, required this.onClientSelected})
+    : super(key: key);
+
+  @override
+  _ClientSearchWidgetState createState() => _ClientSearchWidgetState();
+}
+
+class _ClientSearchWidgetState extends State<ClientSearchWidget> {
+  final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  bool _isDisposed = false;
+  Map<String, String> _clientsMap = {};
+
+  @override
+  Widget build(BuildContext context) {
+    return TypeAheadField<String>(
+      controller: _controller,
+      focusNode: _focusNode,
+      hideOnEmpty: true,
+      hideOnError: true,
+      hideOnLoading: false,
+      retainOnLoading: true,
+      autoFlipDirection: false,
+      hideKeyboardOnDrag: false,
+      builder: (context, controller, focusNode) {
+        return TextField(
+          controller: controller,
+          focusNode: focusNode,
+          decoration: InputDecoration(
+            labelText: 'Search Client',
+            prefixIcon: Icon(Icons.search, color: Colors.grey.shade600),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        );
+      },
+      suggestionsCallback: (pattern) async {
+        if (pattern.isEmpty) return [];
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final token = prefs.getString('auth_token') ?? '';
+
+          final response = await http.get(
+            Uri.parse(
+              'http://estcommand.ddns.net:8080/api/v1/clients/search?term=$pattern',
+            ),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+          );
+          if (response.statusCode == 200) {
+            final List<dynamic> clientsJson = jsonDecode(response.body);
+            _clientsMap = {
+              for (var client in clientsJson)
+                client['clientName']: client['clientsID'],
+            };
+            return _clientsMap.keys.toList();
+          }
+          return [];
+        } catch (e) {
+          return [];
+        }
+      },
+      itemBuilder: (context, String suggestion) => ListTile(
+        leading: Icon(Icons.person, color: Colors.blue.shade600, size: 20),
+        title: Text(suggestion),
+        subtitle: Text('ID: ${_clientsMap[suggestion] ?? 'N/A'}'),
+      ),
+      onSelected: (String suggestion) {
+        if (!_isDisposed) {
+          // Immediately call callback without any delays
+          widget.onClientSelected(suggestion, _clientsMap[suggestion] ?? '');
+
+          // Clear field after a very short delay to avoid focus conflicts
+          Timer(Duration(milliseconds: 50), () {
+            if (!_isDisposed && mounted) {
+              _controller.clear();
+            }
+          });
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    _focusNode.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+}
+
+class ProductSearchWidget extends StatefulWidget {
+  final List<Product> availableProducts;
+  final Function(Product) onProductSelected;
+
+  const ProductSearchWidget({
+    Key? key,
+    required this.availableProducts,
+    required this.onProductSelected,
+  }) : super(key: key);
+
+  @override
+  _ProductSearchWidgetState createState() => _ProductSearchWidgetState();
+}
+
+class _ProductSearchWidgetState extends State<ProductSearchWidget> {
+  final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  bool _isDisposed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return TypeAheadField<Product>(
+      controller: _controller,
+      focusNode: _focusNode,
+      hideOnEmpty: true,
+      hideOnError: true,
+      hideOnLoading: false,
+      retainOnLoading: true,
+      autoFlipDirection: false,
+      hideKeyboardOnDrag: false,
+      builder: (context, controller, focusNode) {
+        return TextField(
+          controller: controller,
+          focusNode: focusNode,
+          decoration: InputDecoration(
+            labelText: 'Add Product',
+            prefixIcon: Icon(Icons.inventory_2, color: Colors.grey.shade600),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        );
+      },
+      suggestionsCallback: (pattern) {
+        if (pattern.isEmpty) return [];
+        return widget.availableProducts
+            .where(
+              (p) =>
+                  p.productName!.toLowerCase().contains(pattern.toLowerCase()),
+            )
+            .toList();
+      },
+      itemBuilder: (context, Product suggestion) => ListTile(
+        leading: Icon(Icons.inventory_2, color: Colors.blue.shade600, size: 20),
+        title: Text(suggestion.productName ?? ''),
+        subtitle: Text(
+          'Price: ${suggestion.initialPrice?.toStringAsFixed(2) ?? '0.00'} DA',
+        ),
+      ),
+      onSelected: (Product suggestion) {
+        if (!_isDisposed) {
+          // Immediately call callback without delays
+          widget.onProductSelected(suggestion);
+
+          // Clear field after a very short delay
+          Timer(Duration(milliseconds: 50), () {
+            if (!_isDisposed && mounted) {
+              _controller.clear();
+            }
+          });
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    _focusNode.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+}
 
 class PurchaseOrdersPage extends StatefulWidget {
   const PurchaseOrdersPage({Key? key}) : super(key: key);
@@ -137,14 +334,25 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
 
-    // Keep current page if requested
-    final int skip = keepPage ? page * pageSize : 0;
-    final int take = pageSize;
+    final Map<String, String> queryParams = {};
 
-    final Map<String, String> queryParams = {
-      'skip': skip.toString(),
-      'take': take.toString(),
-    };
+    // When applying filters, fetch more data to ensure we get all matching results
+    bool hasActiveFilters =
+        (searchQuery != null && searchQuery.isNotEmpty) ||
+        stateFilter != null ||
+        (productFilters != null && productFilters.isNotEmpty) ||
+        dateRange != null;
+
+    if (hasActiveFilters) {
+      // Fetch a larger dataset when filtering to ensure we capture all matching results
+      queryParams['skip'] = '0';
+      queryParams['take'] = '1000'; // Fetch more data when filtering
+    } else {
+      // Normal pagination when no filters are active
+      final int skip = keepPage ? page * pageSize : 0;
+      queryParams['skip'] = skip.toString();
+      queryParams['take'] = pageSize.toString();
+    }
 
     // Add date range filters
     if (dateRange != null) {
@@ -179,15 +387,49 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     }
 
     // Add product filter (using backend's field name 'operator')
-    if (productFilters != null && productFilters.length == 1) {
-      // Single product filter - use API filtering
-      queryParams['operator'] = productFilters.first;
+    // Note: Backend only supports single product filter at a time
+    if (productFilters != null && productFilters.isNotEmpty) {
+      if (productFilters.length == 1) {
+        // Single product filter - use API filtering for better performance
+        queryParams['operator'] = productFilters.first;
+      } else {
+        // Multiple products selected - we'll need to make multiple API calls or filter client-side
+        // For now, let's not use API filtering and rely on client-side filtering
+        // This could be optimized by making multiple API calls and combining results
+      }
     }
-    // For multiple products, we'll fetch all and filter client-side
 
-    final uri = Uri.parse(
-      'http://92.222.248.113:3000/api/v1/commands',
-    ).replace(queryParameters: queryParams);
+    // Check if user is delegue and get their region
+    bool userIsDelegue = await isDelegue() ?? false;
+    String? userRegion;
+
+    if (userIsDelegue) {
+      userRegion = await getUserRegion();
+    }
+
+    final String baseUrl;
+    if (userIsDelegue && userRegion != null) {
+      // Use zone-specific endpoint for delegue users
+      baseUrl =
+          'http://estcommand.ddns.net:8080/api/v1/commands/zone/$userRegion';
+    } else {
+      // Use regular endpoint for admin/superuser/client users
+      baseUrl = 'http://estcommand.ddns.net:8080/api/v1/commands';
+    }
+
+    final uri = Uri.parse(baseUrl).replace(queryParameters: queryParams);
+
+    // DEBUG: Print fetch request details
+    print('=== ORDER FETCH DEBUG ===');
+    print('Base URL: $baseUrl');
+    print('Query Parameters: $queryParams');
+    print('Full URI: $uri');
+    print('User is Delegue: $userIsDelegue');
+    print('User Region: $userRegion');
+    print('Auth Token Length: ${token.length}');
+    print('Auth Token: ${token.substring(0, 20)}...');
+    print('Full Token: $token');
+    print('========================');
 
     try {
       final response = await http.get(
@@ -198,16 +440,54 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         },
       );
 
+      // DEBUG: Print fetch response
+      print('=== FETCH RESPONSE DEBUG ===');
+      print('Status Code: ${response.statusCode}');
+      print('Response Headers: ${response.headers}');
+      print('Response Body Length: ${response.body.length}');
+      print('Response Body: ${response.body}');
+      print('============================');
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
+
+        // DEBUG: Print parsed data structure
+        print('=== PARSED DATA DEBUG ===');
+        print('Data Keys: ${data.keys.toList()}');
+        print('Total Count: ${data['totalCount']}');
+        print('Orders Count: ${data['orders']?.length ?? 0}');
+        print('=========================');
         if (!mounted) return;
 
         // Parse orders from response
         final ordersList = (data['data'] ?? []) as List<dynamic>;
         final allOrders = ordersList.map<Map<String, dynamic>>((item) {
+          // Debug: Let's see what client data we're getting
+          print('Client data from API: ${item['client']}');
+          print('Clients data from API: ${item['clients']}');
+          print('User data from API: ${item['user']}');
+          print('Users data from API: ${item['users']}');
+          print('Full item structure: ${item.keys.toList()}');
+
+          // Handle different possible client data structures
+          String clientName = 'Unknown';
+
+          // Check if clients object exists and has clientName
+          if (item['clients'] != null && item['clients'] is Map) {
+            clientName = item['clients']['clientName'] ?? 'Unknown';
+          } else if (item['client'] != null) {
+            if (item['client'] is Map) {
+              // Client is an object with clientName field
+              clientName = item['client']['clientName'] ?? 'Unknown';
+            } else if (item['client'] is String) {
+              // Client is already a string (client name)
+              clientName = item['client'];
+            }
+          }
+
           return {
             'id': item['id'],
-            'client': item['client']?['clientName'] ?? 'Unknown',
+            'client': clientName,
             'product': item['operator'] ?? 'Unknown',
             'quantity': item['amount'] ?? 0,
             'prixPercent':
@@ -216,7 +496,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                 ) ??
                 0,
             'state': item['isValidated'] ?? 'En Attente',
-            'name': item['user']?['username'] ?? 'Unknown',
+            'name': item['users']?['username'] ?? 'Unknown',
             'number': item['number'] ?? 'Unknown',
             'accepted': item['accepted'] ?? 'Unknown',
             'acceptedBy': item['acceptedBy'] ?? ' ',
@@ -224,7 +504,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           };
         }).toList();
 
-        // Apply client-side search filter (since API doesn't seem to support client name search)
+        // Apply client-side search filter (since API doesn't support client name search)
         List<Map<String, dynamic>> filteredOrders = allOrders;
         if (searchQuery != null && searchQuery.isNotEmpty) {
           filteredOrders = allOrders.where((order) {
@@ -234,23 +514,81 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           }).toList();
         }
 
-        // If multiple products are selected, apply client-side filtering
-        if (productFilters != null && productFilters.length > 1) {
-          filteredOrders = filteredOrders.where((order) {
-            return productFilters.contains(order['product']);
-          }).toList();
+        // Apply client-side product filtering when multiple products are selected
+        // or when API filtering wasn't used
+        if (productFilters != null && productFilters.isNotEmpty) {
+          if (productFilters.length > 1) {
+            // Multiple products selected - filter client-side
+            filteredOrders = filteredOrders.where((order) {
+              return productFilters.contains(order['product']);
+            }).toList();
+          }
+          // Single product case is already handled by API filtering above
         }
 
-        setState(() {
-          _currentPageOrders = filteredOrders;
-          _totalOrdersCount = data['totalCount'] ?? filteredOrders.length;
-        });
+        // Handle pagination based on whether filters are active
+        List<Map<String, dynamic>> finalOrders;
+        int totalCount;
+
+        if (hasActiveFilters) {
+          // When filters are active, handle pagination client-side
+          totalCount = filteredOrders.length;
+          final startIndex = page * pageSize;
+          final endIndex = (startIndex + pageSize).clamp(0, totalCount);
+
+          if (startIndex < totalCount) {
+            finalOrders = filteredOrders.sublist(startIndex, endIndex);
+          } else {
+            finalOrders = [];
+          }
+        } else {
+          // When no filters, use the paginated results from API
+          finalOrders = filteredOrders;
+          totalCount = data['totalCount'] ?? filteredOrders.length;
+        }
+
+        if (mounted) {
+          setState(() {
+            _currentPageOrders = finalOrders;
+            _totalOrdersCount = totalCount;
+          });
+        }
+      } else if (response.statusCode == 401) {
+        // Token expired or invalid - redirect to login
+        print('=== AUTHENTICATION ERROR ===');
+        print('Token expired or invalid. Redirecting to login...');
+        print('=============================');
+        if (mounted) {
+          // Clear stored token
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('auth_token');
+          await prefs.remove('userid');
+
+          // Navigate to login page
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const LoginPage()),
+          );
+        }
+        return;
+      } else {
+        // Handle other error cases
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: ${response.statusCode} - ${response.body}'),
+            ),
+          );
+        }
+        return;
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error fetching orders: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error fetching orders: $e')));
+      }
     }
   }
 
@@ -310,6 +648,14 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     _checkAdmin();
     _checkSuser();
     _checkClient();
+    _checkDelegue();
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    _searchTimer?.cancel();
+    super.dispose();
   }
 
   // Load WhatsApp number from SharedPreferences
@@ -337,10 +683,27 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         .map((entry) => entry.key)
         .toList();
 
-    // If no products are selected, select all products
-    final List<String>? productFilters = selectedProducts.isEmpty
+    // Debug: Print selected products
+    print('Selected products: $selectedProducts');
+    print('Total available products: ${productCheckboxes.keys.toList()}');
+
+    // If all products are selected or none are selected, don't apply product filter
+    final List<String>? productFilters =
+        (selectedProducts.isEmpty ||
+            selectedProducts.length == productCheckboxes.length)
         ? null
         : selectedProducts;
+
+    print('Final product filters sent to API: $productFilters');
+
+    // Track if we have active filters
+    _hasActiveFilters =
+        (searchQuery.isNotEmpty) ||
+        (selectedState != null) ||
+        (productFilters != null) ||
+        (selectedDateRange != null);
+
+    print('Has active filters: $_hasActiveFilters');
 
     await fetchPurchaseOrders(
       page: 0, // Reset to first page when applying filters
@@ -353,9 +716,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     );
 
     // Reset current page to 0 when filters are applied
-    setState(() {
-      _currentPage = 0;
-    });
+    if (mounted) {
+      setState(() {
+        _currentPage = 0;
+      });
+    }
   }
 
   // Fetch with current filters (for pagination)
@@ -365,10 +730,19 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         .map((entry) => entry.key)
         .toList();
 
-    // If no products are selected, select all products
-    final List<String>? productFilters = selectedProducts.isEmpty
+    // If all products are selected or none are selected, don't apply product filter
+    final List<String>? productFilters =
+        (selectedProducts.isEmpty ||
+            selectedProducts.length == productCheckboxes.length)
         ? null
         : selectedProducts;
+
+    // Update active filters status
+    _hasActiveFilters =
+        (searchQuery.isNotEmpty) ||
+        (selectedState != null) ||
+        (productFilters != null) ||
+        (selectedDateRange != null);
 
     await fetchPurchaseOrders(
       page: page,
@@ -446,7 +820,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
     try {
       final response = await http.delete(
-        Uri.parse('http://92.222.248.113:3000/api/v1/commands/$orderId'),
+        Uri.parse('http://estcommand.ddns.net:8080/api/v1/commands/$orderId'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -506,7 +880,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
     final url = Uri.parse(
-      'http://92.222.248.113:3000/api/v1/commands/$orderId',
+      'http://estcommand.ddns.net:8080/api/v1/commands/$orderId',
     );
     try {
       final response = await http.put(
@@ -539,7 +913,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   Future<void> handleAccept(bool accepted, int id) async {
     final orderId = _currentPageOrders[id]['id'].toString();
     final url = Uri.parse(
-      'http://92.222.248.113:3000/api/v1/commands/accept/$orderId',
+      'http://estcommand.ddns.net:8080/api/v1/commands/accept/$orderId',
     );
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
@@ -653,7 +1027,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     );
   }
 
-  void _showAddOrderDialog() {
+  void _showAddOrderDialog() async {
     final clientController = TextEditingController();
     final numberController = TextEditingController();
     Map<String, String> clientsMap = {};
@@ -662,435 +1036,570 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     List<Map<String, dynamic>> selectedProducts = [];
     List<Product> availableProducts = [];
 
-    // Fetch products from database
-    Future<void> fetchProducts() async {
-      try {
-        final response = await http.get(
-          Uri.parse('http://92.222.248.113:3000/api/v1/products'),
-        );
-        if (response.statusCode == 200) {
-          final List<dynamic> data = json.decode(response.body);
-          availableProducts = data
-              .map((json) => Product.fromJson(json))
-              .toList();
-        }
-      } catch (e) {
-        // Handle error if needed
-      }
-    }
-
-    Widget buildMultiProductInput(BuildContext context) {
-      return StatefulBuilder(
-        builder: (context, setStateDialog) {
-          return FutureBuilder<void>(
-            future: fetchProducts(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return Center(child: CircularProgressIndicator());
-              }
-
-              return Column(
-                children: [
-                  TypeAheadField<Product>(
-                    builder: (context, controller, focusNode) {
-                      return TextField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        decoration: InputDecoration(
-                          labelText: 'Search Product',
-                          suffixIcon: Icon(Icons.search),
-                          border: OutlineInputBorder(),
-                        ),
-                      );
-                    },
-                    suggestionsCallback: (pattern) => availableProducts
-                        .where(
-                          (p) => p.productName!.toLowerCase().contains(
-                            pattern.toLowerCase(),
-                          ),
-                        )
-                        .toList(),
-                    itemBuilder: (context, Product suggestion) => ListTile(
-                      title: Text(suggestion.productName ?? ''),
-                      subtitle: Text(
-                        'Prix: ${suggestion.initialPrice?.toStringAsFixed(2) ?? '0.00'} DA',
-                      ),
-                    ),
-                    onSelected: (Product suggestion) {
-                      setStateDialog(() {
-                        selectedProducts.add({
-                          'product': suggestion.productName ?? '',
-                          'productId': suggestion.productID ?? '',
-                          'quantity': 1,
-                          'unitPrice': suggestion.initialPrice ?? 0.0,
-                        });
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  if (selectedProducts.isNotEmpty)
-                    Container(
-                      height: selectedProducts.length > 5
-                          ? 400.0 // Max height for 5 items
-                          : selectedProducts.length * 80.0,
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: selectedProducts.length,
-                        itemBuilder: (context, index) {
-                          final item = selectedProducts[index];
-                          return Card(
-                            margin: EdgeInsets.symmetric(vertical: 4),
-                            child: Padding(
-                              padding: EdgeInsets.all(8),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    flex: 2,
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          item['product'],
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        Text(
-                                          'Prix BD: ${item['unitPrice'].toStringAsFixed(2)} DA',
-                                          style: TextStyle(
-                                            color: Colors.grey[600],
-                                            fontSize: 10,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  SizedBox(width: 4),
-                                  Expanded(
-                                    flex: 1,
-                                    child: TextFormField(
-                                      initialValue: item['unitPrice']
-                                          .toStringAsFixed(2),
-                                      keyboardType:
-                                          TextInputType.numberWithOptions(
-                                            decimal: true,
-                                          ),
-                                      enabled:
-                                          !isclient, // Read-only for clients
-                                      onChanged: (value) {
-                                        item['unitPrice'] =
-                                            double.tryParse(value) ??
-                                            item['unitPrice'];
-                                      },
-                                      decoration: InputDecoration(
-                                        labelText: 'PU',
-                                        border: OutlineInputBorder(),
-                                        contentPadding: EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 4,
-                                        ),
-                                        fillColor: isclient
-                                            ? Colors.grey[100]
-                                            : null,
-                                        filled: isclient,
-                                      ),
-                                      style: TextStyle(
-                                        color: isclient
-                                            ? Colors.grey[600]
-                                            : null,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(width: 4),
-                                  Expanded(
-                                    flex: 1,
-                                    child: TextFormField(
-                                      initialValue: item['quantity'].toString(),
-                                      keyboardType: TextInputType.number,
-                                      onChanged: (value) {
-                                        item['quantity'] =
-                                            int.tryParse(value) ?? 1;
-                                      },
-                                      decoration: InputDecoration(
-                                        labelText: 'Qty',
-                                        border: OutlineInputBorder(),
-                                        contentPadding: EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 4,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(width: 8),
-                                  IconButton(
-                                    icon: Icon(
-                                      Icons.remove_circle,
-                                      color: Colors.red,
-                                    ),
-                                    onPressed: () {
-                                      setStateDialog(() {
-                                        selectedProducts.removeAt(index);
-                                      });
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ), // End of ListView.builder
-                    ), // End of Container
-                ],
-              );
-            },
-          );
-        },
+    // Fetch products from database BEFORE showing dialog
+    try {
+      final response = await http.get(
+        Uri.parse('http://estcommand.ddns.net:8080/api/v1/products'),
       );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        availableProducts = data.map((json) => Product.fromJson(json)).toList();
+      }
+    } catch (e) {
+      // Handle error if needed
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error loading products: $e')));
     }
 
     showDialog(
       context: context,
       builder: (_) {
         final screenWidth = MediaQuery.of(context).size.width;
-        final screenHeight = MediaQuery.of(context).size.height;
+        final isMobile = screenWidth < 600;
 
-        // Responsive sizing based on screen width
-        double dialogWidth;
-        double dialogHeight;
-        double maxWidth;
-        double maxHeight;
-
-        if (screenWidth > 1200) {
-          // Large desktop
-          dialogWidth = screenWidth * 0.6;
-          dialogHeight = screenHeight * 0.65;
-          maxWidth = 700;
-          maxHeight = 550;
-        } else if (screenWidth > 800) {
-          // Medium desktop/tablet
-          dialogWidth = screenWidth * 0.75;
-          dialogHeight = screenHeight * 0.70;
-          maxWidth = 600;
-          maxHeight = 500;
-        } else {
-          // Small screens/mobile
-          dialogWidth = screenWidth * 0.90;
-          dialogHeight = screenHeight * 0.75;
-          maxWidth = 500;
-          maxHeight = 450;
-        }
-
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Container(
-            width: dialogWidth,
-            height: dialogHeight,
-            constraints: BoxConstraints(
-              maxWidth: maxWidth,
-              maxHeight: maxHeight,
-              minWidth: 450,
-              minHeight: 350,
-            ),
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              insetPadding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 16 : 40,
+                vertical: isMobile ? 24 : 40,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Container(
+                width: isMobile ? double.infinity : 600,
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.9,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
-                      'Add New Order',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                    // Header
+                    Container(
+                      padding: EdgeInsets.all(isMobile ? 16 : 20),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(12),
+                          topRight: Radius.circular(12),
+                        ),
+                        border: Border(
+                          bottom: BorderSide(color: Colors.grey.shade200),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.add_shopping_cart,
+                            color: Colors.blue.shade600,
+                            size: 24,
+                          ),
+                          SizedBox(width: 12),
+                          Text(
+                            'New Order',
+                            style: TextStyle(
+                              fontSize: isMobile ? 18 : 20,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade800,
+                            ),
+                          ),
+                          Spacer(),
+                          IconButton(
+                            icon: Icon(
+                              Icons.close,
+                              color: Colors.grey.shade600,
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          isclient
-                              ? SizedBox()
-                              : TypeAheadField<String>(
-                                  builder: (context, controller, focusNode) {
-                                    return TextField(
-                                      controller: controller,
-                                      focusNode: focusNode,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Client',
-                                        prefixIcon: Icon(Icons.person),
-                                        border: OutlineInputBorder(),
-                                      ),
-                                      onChanged: (value) {
-                                        clientController.text = value;
-                                      },
-                                    );
-                                  },
-                                  suggestionsCallback: (pattern) async {
-                                    if (pattern.isEmpty) return [];
-                                    try {
-                                      final prefs =
-                                          await SharedPreferences.getInstance();
-                                      final token =
-                                          prefs.getString('auth_token') ?? '';
 
-                                      final response = await http.get(
-                                        Uri.parse(
-                                          'http://92.222.248.113:3000/api/v1/clients/search?term=$pattern',
+                    // Content
+                    Flexible(
+                      child: SingleChildScrollView(
+                        child: Padding(
+                          padding: EdgeInsets.all(isMobile ? 16 : 20),
+                          child: Form(
+                            key: _formKey,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Client Search Field (Top)
+                                if (!isclient) ...[
+                                  selectedClientName != null
+                                      ? // Show selected client as a read-only field
+                                        Container(
+                                          padding: EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.green.shade50,
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            border: Border.all(
+                                              color: Colors.green.shade300,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.person,
+                                                color: Colors.green.shade600,
+                                                size: 20,
+                                              ),
+                                              SizedBox(width: 12),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      'Selected Client',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors
+                                                            .green
+                                                            .shade700,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      selectedClientName!,
+                                                      style: TextStyle(
+                                                        fontSize: 14,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color: Colors
+                                                            .green
+                                                            .shade800,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      'ID: ${clientsMap[selectedClientName] ?? 'N/A'}',
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: Colors
+                                                            .green
+                                                            .shade600,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              IconButton(
+                                                icon: Icon(
+                                                  Icons.edit,
+                                                  color: Colors.green.shade600,
+                                                  size: 18,
+                                                ),
+                                                onPressed: () {
+                                                  setDialogState(() {
+                                                    selectedClientName = null;
+                                                  });
+                                                  clientController.clear();
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        )
+                                      : // Show search field when no client is selected
+                                        ClientSearchWidget(
+                                          onClientSelected:
+                                              (
+                                                String clientName,
+                                                String clientId,
+                                              ) {
+                                                // Update variables and state immediately
+                                                selectedClientName = clientName;
+                                                clientsMap[clientName] =
+                                                    clientId;
+
+                                                // Immediate state update
+                                                setDialogState(() {
+                                                  // Client selected - update UI immediately
+                                                });
+                                              },
                                         ),
-                                        headers: {
-                                          'Authorization': 'Bearer $token',
-                                          'Content-Type': 'application/json',
+                                  SizedBox(height: 16),
+                                ],
+
+                                // Products Section (Middle)
+                                Flexible(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      // Product Search - Use separate widget to prevent rebuild
+                                      ProductSearchWidget(
+                                        key: ValueKey('product_search'),
+                                        availableProducts: availableProducts,
+                                        onProductSelected: (Product product) {
+                                          // Add product to list and update immediately
+                                          selectedProducts.add({
+                                            'product':
+                                                product.productName ?? '',
+                                            'productId':
+                                                product.productID ?? '',
+                                            'quantity': 1,
+                                            'unitPrice':
+                                                product.initialPrice ?? 0.0,
+                                          });
+                                          // Immediate state update
+                                          setDialogState(() {
+                                            // Product list updated
+                                          });
                                         },
-                                      );
-                                      if (response.statusCode == 200) {
-                                        final List<dynamic> clientsJson =
-                                            jsonDecode(response.body);
-                                        clientsMap = {
-                                          for (var client in clientsJson)
-                                            client['clientName']:
-                                                client['clientsID'],
-                                        };
-                                        return clientsMap.keys.toList();
-                                      } else {
-                                        print(
-                                          'Client search failed: ${response.statusCode}',
-                                        );
-                                        return [];
-                                      }
-                                    } catch (e) {
-                                      print('Client search error: $e');
-                                      return [];
-                                    }
-                                  },
-                                  itemBuilder: (context, String suggestion) =>
-                                      ListTile(title: Text(suggestion)),
-                                  onSelected: (String suggestion) {
-                                    clientController.text = suggestion;
-                                    selectedClientName = suggestion;
-                                  },
+                                      ),
+
+                                      // Selected Products List
+                                      if (selectedProducts.isNotEmpty) ...[
+                                        SizedBox(height: 16),
+                                        Text(
+                                          'Selected Products',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.grey.shade700,
+                                          ),
+                                        ),
+                                        SizedBox(height: 8),
+                                        ...selectedProducts.asMap().entries.map((
+                                          entry,
+                                        ) {
+                                          final index = entry.key;
+                                          final item = entry.value;
+                                          return Container(
+                                            margin: EdgeInsets.only(bottom: 8),
+                                            padding: EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade50,
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: Colors.grey.shade200,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Expanded(
+                                                  flex: 3,
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Text(
+                                                        item['product'],
+                                                        style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.w500,
+                                                          fontSize: 13,
+                                                        ),
+                                                      ),
+                                                      Text(
+                                                        'Base: ${item['unitPrice'].toStringAsFixed(2)} DA',
+                                                        style: TextStyle(
+                                                          color: Colors
+                                                              .grey
+                                                              .shade600,
+                                                          fontSize: 11,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                SizedBox(width: 8),
+                                                Container(
+                                                  width: isMobile ? 60 : 80,
+                                                  child: TextFormField(
+                                                    initialValue:
+                                                        item['unitPrice']
+                                                            .toStringAsFixed(2),
+                                                    keyboardType:
+                                                        TextInputType.numberWithOptions(
+                                                          decimal: true,
+                                                        ),
+                                                    enabled: !isclient,
+                                                    onChanged: (value) {
+                                                      item['unitPrice'] =
+                                                          double.tryParse(
+                                                            value,
+                                                          ) ??
+                                                          item['unitPrice'];
+                                                    },
+                                                    decoration: InputDecoration(
+                                                      labelText: 'Price',
+                                                      border:
+                                                          OutlineInputBorder(),
+                                                      contentPadding:
+                                                          EdgeInsets.symmetric(
+                                                            horizontal: 8,
+                                                            vertical: 8,
+                                                          ),
+                                                      isDense: true,
+                                                    ),
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ),
+                                                SizedBox(width: 8),
+                                                Container(
+                                                  width: isMobile ? 50 : 60,
+                                                  child: TextFormField(
+                                                    initialValue:
+                                                        item['quantity']
+                                                            .toString(),
+                                                    keyboardType:
+                                                        TextInputType.number,
+                                                    onChanged: (value) {
+                                                      item['quantity'] =
+                                                          int.tryParse(value) ??
+                                                          1;
+                                                    },
+                                                    decoration: InputDecoration(
+                                                      labelText: 'Qty',
+                                                      border:
+                                                          OutlineInputBorder(),
+                                                      contentPadding:
+                                                          EdgeInsets.symmetric(
+                                                            horizontal: 8,
+                                                            vertical: 8,
+                                                          ),
+                                                      isDense: true,
+                                                    ),
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ),
+                                                SizedBox(width: 8),
+                                                IconButton(
+                                                  icon: Icon(
+                                                    Icons.close,
+                                                    color: Colors.red.shade600,
+                                                    size: 18,
+                                                  ),
+                                                  onPressed: () {
+                                                    setDialogState(() {
+                                                      selectedProducts.removeAt(
+                                                        index,
+                                                      );
+                                                    });
+                                                  },
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ],
+                                    ],
+                                  ),
                                 ),
-                          const SizedBox(height: 16),
-                          buildMultiProductInput(context),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: numberController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Number',
+
+                                SizedBox(height: 16),
+
+                                // Number Field (Bottom)
+                                TextFormField(
+                                  controller: numberController,
+                                  keyboardType: TextInputType.text,
+                                  decoration: InputDecoration(
+                                    labelText: 'Number',
+                                    prefixIcon: Icon(
+                                      Icons.numbers,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Actions
+                    Container(
+                      padding: EdgeInsets.all(isMobile ? 16 : 20),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.only(
+                          bottomLeft: Radius.circular(12),
+                          bottomRight: Radius.circular(12),
+                        ),
+                        border: Border(
+                          top: BorderSide(color: Colors.grey.shade200),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: Text('Cancel'),
+                          ),
+                          SizedBox(width: 12),
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              try {
+                                final prefs =
+                                    await SharedPreferences.getInstance();
+                                final token =
+                                    prefs.getString('auth_token') ?? '';
+                                final payload = decodeJwtPayload(token);
+
+                                if (_formKey.currentState!.validate()) {
+                                  if (selectedProducts.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          "Please add at least one product",
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  if (!isclient && selectedClientName == null) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text("Please select a client"),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  final clientId =
+                                      clientsMap[selectedClientName];
+
+                                  for (var item in selectedProducts) {
+                                    final product = item['product'];
+                                    final quantity = item['quantity'];
+                                    final unitPrice = item['unitPrice'];
+
+                                    if (quantity <= 0) continue;
+
+                                    final orderPayload = {
+                                      'operator': product,
+                                      'amount': quantity,
+                                      'ClientsID': isclient
+                                          ? payload['clid']
+                                          : clientId,
+                                      'isValidated': 'En Attente',
+                                      'pourcentage': '${unitPrice}%',
+                                      'number': numberController.text,
+                                    };
+
+                                    // DEBUG: Print order details before sending
+                                    print('=== ORDER SUBMISSION DEBUG ===');
+                                    print('Product: $product');
+                                    print('Quantity: $quantity');
+                                    print('Unit Price: $unitPrice');
+                                    print(
+                                      'Client ID: ${isclient ? payload['clid'] : clientId}',
+                                    );
+                                    print(
+                                      'Order Number: ${numberController.text}',
+                                    );
+                                    print(
+                                      'Full Order Payload: ${jsonEncode(orderPayload)}',
+                                    );
+                                    print(
+                                      'API Endpoint: http://estcommand.ddns.net:8080/api/v1/commands',
+                                    );
+                                    print(
+                                      'Auth Token: ${token.substring(0, 20)}...',
+                                    );
+                                    print('===============================');
+
+                                    final response = await http.post(
+                                      Uri.parse(
+                                        'http://estcommand.ddns.net:8080/api/v1/commands',
+                                      ),
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': 'Bearer $token',
+                                      },
+                                      body: jsonEncode(orderPayload),
+                                    );
+
+                                    // DEBUG: Print server response
+                                    print('=== SERVER RESPONSE DEBUG ===');
+                                    print(
+                                      'Status Code: ${response.statusCode}',
+                                    );
+                                    print(
+                                      'Response Headers: ${response.headers}',
+                                    );
+                                    print('Response Body: ${response.body}');
+                                    print('=============================');
+
+                                    if (response.statusCode == 201 ||
+                                        response.statusCode == 200) {
+                                      if (mounted) {
+                                        await _fetchWithCurrentFilters(
+                                          page: _currentPage,
+                                        );
+                                      }
+                                    } else {
+                                      throw Exception(
+                                        'Failed to create order: ${response.statusCode} - ${response.body}',
+                                      );
+                                    }
+                                  }
+
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          "${selectedProducts.length} Orders created successfully",
+                                        ),
+                                        backgroundColor: Colors.green,
+                                      ),
+                                    );
+                                    Navigator.pop(context);
+                                  }
+                                }
+                              } catch (e) {
+                                print('Error creating order: $e');
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Error creating order: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                            icon: Icon(Icons.add),
+                            label: Text('Create Order'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue.shade600,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        final prefs = await SharedPreferences.getInstance();
-                        final token = prefs.getString('auth_token') ?? '';
-                        final payload = decodeJwtPayload(token);
-
-                        if (_formKey.currentState!.validate()) {
-                          if (selectedProducts.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  "Please add at least one product",
-                                ),
-                              ),
-                            );
-                            return;
-                          }
-
-                          final clientId = clientsMap[selectedClientName];
-
-                          for (var item in selectedProducts) {
-                            final product = item['product'];
-                            final quantity = item['quantity'];
-                            final unitPrice = item['unitPrice'];
-
-                            if (quantity <= 0) continue;
-
-                            final response = await http.post(
-                              Uri.parse(
-                                'http://92.222.248.113:3000/api/v1/commands',
-                              ),
-                              headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': 'Bearer $token',
-                              },
-                              body: jsonEncode({
-                                'operator': product,
-                                'amount': quantity,
-                                'ClientsID': isclient
-                                    ? payload['clid']
-                                    : clientId,
-                                'isValidated': 'En Attente',
-                                'pourcentage':
-                                    '${unitPrice}%', // Use initial price as percentage
-                                'number': numberController.text,
-                              }),
-                            );
-
-                            if (response.statusCode == 201 ||
-                                response.statusCode == 200) {
-                              // Refresh the current page orders instead of modifying local state
-                              await _fetchWithCurrentFilters(
-                                page: _currentPage,
-                              );
-                            }
-                          }
-
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                "${selectedProducts.length} Orders created successfully",
-                              ),
-                            ),
-                          );
-                          Navigator.pop(context);
-                        }
-                      },
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue.shade600,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
-              ],
-            ),
-          ),
-        ); // Close Container
-      }, // Close builder function
-    ); // Close showDialog
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _updateOrder(int index, Map<String, dynamic> updatedOrder) async {
@@ -1113,26 +1622,49 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     if (updatedOrder['state'] != null) {
       body['isValidated'] = updatedOrder['state'];
     }
+
+    // DEBUG: Print order update details
+    print('=== ORDER UPDATE DEBUG ===');
+    print('Order ID: $orderId');
+    print('Updated Order Data: ${jsonEncode(updatedOrder)}');
+    print('Update Payload: ${jsonEncode(body)}');
+    print(
+      'API Endpoint: http://estcommand.ddns.net:8080/api/v1/commands/$orderId',
+    );
+    print('Auth Token: ${token.substring(0, 20)}...');
+    print('=========================');
+
     final response = await http.put(
-      Uri.parse('http://92.222.248.113:3000/api/v1/commands/$orderId'),
+      Uri.parse('http://estcommand.ddns.net:8080/api/v1/commands/$orderId'),
       headers: {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
       },
       body: json.encode(body),
     );
+
+    // DEBUG: Print update response
+    print('=== UPDATE RESPONSE DEBUG ===');
+    print('Status Code: ${response.statusCode}');
+    print('Response Headers: ${response.headers}');
+    print('Response Body: ${response.body}');
+    print('============================');
     if (response.statusCode == 200) {
       // Refresh the current page orders instead of modifying local state
-      await _fetchWithCurrentFilters(page: _currentPage);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Order updated successfully')),
-      );
+      if (mounted) {
+        await _fetchWithCurrentFilters(page: _currentPage);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Order updated successfully')),
+        );
+      }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to update order: ${response.statusCode}'),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update order: ${response.statusCode}'),
+          ),
+        );
+      }
     }
   }
 
@@ -1251,7 +1783,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
                               final response = await http.get(
                                 Uri.parse(
-                                  'http://92.222.248.113:3000/api/v1/clients/search?term=$pattern',
+                                  'http://estcommand.ddns.net:8080/api/v1/clients/search?term=$pattern',
                                 ),
                                 headers: {
                                   'Authorization': 'Bearer $token',
@@ -1329,7 +1861,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     int? isSu,
     int? isCo,
   }) async {
-    final url = Uri.parse('http://92.222.248.113:3000/api/v1/auth/register');
+    final url = Uri.parse(
+      'http://estcommand.ddns.net:8080/api/v1/auth/register',
+    );
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
     final Map<String, dynamic> requestBody = {
@@ -1387,6 +1921,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
   void _checkClient() async {
     isclient = await isClient() ?? false;
+    setState(() {});
+  }
+
+  void _checkDelegue() async {
+    isDelegatee = await isDelegue() ?? false;
     setState(() {});
   }
 
@@ -1522,20 +2061,26 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   Timer? _searchTimer;
 
   void _onSearchChanged(String value) {
-    setState(() => searchQuery = value);
+    if (mounted) {
+      setState(() => searchQuery = value);
+    }
 
     // Cancel previous timer
     _searchTimer?.cancel();
 
     // Start new timer
     _searchTimer = Timer(const Duration(milliseconds: 500), () {
-      _applyFiltersAndRefresh();
+      if (mounted) {
+        _applyFiltersAndRefresh();
+      }
     });
   }
 
   void _startAutoRefresh() {
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      _fetchWithCurrentFilters(page: _currentPage);
+      if (mounted) {
+        _fetchWithCurrentFilters(page: _currentPage);
+      }
     });
   }
 
@@ -1611,10 +2156,11 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
   int _currentPage = 0;
   final int _rowsPerPage = 10;
+  bool _hasActiveFilters = false; // Track if we have active filters
 
   List<Map<String, dynamic>> get paginatedOrders {
-    // Since backend already paginates, just return filteredOrders (which is _currentPageOrders filtered)
-    return filteredOrders;
+    // Since filtering logic is now handled in fetchPurchaseOrders, just return current page orders
+    return _currentPageOrders;
   }
 
   Widget _buildPaginationControls() {
@@ -1652,13 +2198,6 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     );
   }
 
-  @override
-  void dispose() {
-    _refreshTimer?.cancel();
-    _searchTimer?.cancel();
-    super.dispose();
-  }
-
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -1675,19 +2214,37 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           },
         ),
         centerTitle: true,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Image.asset('assets/images/my_logo.png', height: 32, width: 32),
-            const SizedBox(width: 8),
-            Text(
-              'Commandes EST STAR',
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w600,
-                color: Colors.red.shade700,
-              ),
-            ),
-          ],
+        title: LayoutBuilder(
+          builder: (context, constraints) {
+            // On mobile (screen width < 600), show only logo
+            if (MediaQuery.of(context).size.width < 600) {
+              return Image.asset(
+                'assets/images/my_logo.png',
+                height: 32,
+                width: 32,
+              );
+            } else {
+              // On larger screens, show logo + title
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/images/my_logo.png',
+                    height: 32,
+                    width: 32,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Commandes EST STAR',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.red.shade700,
+                    ),
+                  ),
+                ],
+              );
+            }
+          },
         ),
         actions: [
           if (isAdminn || isSuserr)
@@ -1882,25 +2439,26 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                   ),
                                 ),
                               ),
-                              ElevatedButton.icon(
-                                onPressed: _showAddOrderDialog,
-                                icon: const Icon(Icons.add, size: 14),
-                                label: const Text(
-                                  'Ajouter',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green.shade600,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
+                              if (!isDelegatee)
+                                ElevatedButton.icon(
+                                  onPressed: _showAddOrderDialog,
+                                  icon: const Icon(Icons.add, size: 14),
+                                  label: const Text(
+                                    'Ajouter',
+                                    style: TextStyle(fontSize: 12),
                                   ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(6),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green.shade600,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
                                   ),
                                 ),
-                              ),
                               ElevatedButton.icon(
                                 onPressed: () {
                                   setState(() {
@@ -1983,14 +2541,18 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                     child: Column(
                       children: [
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Image.asset(
-                              'assets/images/my_logo.png',
-                              fit: BoxFit.contain,
-                              width: 100,
-                              height: 100,
+                            Expanded(
+                              child: TextField(
+                                decoration: const InputDecoration(
+                                  labelText: 'Rechercher par client',
+                                  prefixIcon: Icon(Icons.search),
+                                  border: OutlineInputBorder(),
+                                ),
+                                onChanged: _onSearchChanged,
+                              ),
                             ),
+                            const SizedBox(width: 12),
                             GestureDetector(
                               onTap: () {
                                 setState(() {
@@ -2012,18 +2574,6 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                               ),
                             ),
                           ],
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: TextField(
-                            decoration: const InputDecoration(
-                              labelText: 'Rechercher par client',
-                              prefixIcon: Icon(Icons.search),
-                              border: OutlineInputBorder(),
-                            ),
-                            onChanged: _onSearchChanged,
-                          ),
                         ),
                         AnimatedCrossFade(
                           firstChild: Container(height: 0),
@@ -2107,25 +2657,25 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                           ),
                                         ),
                                       ),
-                                      ElevatedButton.icon(
-                                        onPressed: _showAddOrderDialog,
-                                        icon: const Icon(Icons.add, size: 16),
-                                        label: const Text('Ajouter'),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor:
-                                              Colors.green.shade600,
-                                          foregroundColor: Colors.white,
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 8,
-                                          ),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              8,
+                                      if (!isDelegatee)
+                                        ElevatedButton.icon(
+                                          onPressed: _showAddOrderDialog,
+                                          icon: const Icon(Icons.add, size: 16),
+                                          label: const Text('Ajouter'),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor:
+                                                Colors.green.shade600,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 8,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
                                             ),
                                           ),
                                         ),
-                                      ),
                                       ElevatedButton.icon(
                                         onPressed: () {
                                           setState(() {
@@ -2240,9 +2790,30 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                 ),
                               ],
                             ),
-                            child: ListView.builder(
+                            child: ListView.separated(
                               padding: const EdgeInsets.all(8),
                               itemCount: paginatedOrders.length,
+                              separatorBuilder: (context, index) => Container(
+                                height: 12,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                ),
+                                child: Center(
+                                  child: Container(
+                                    height: 2,
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.grey.shade300,
+                                          Colors.transparent,
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(1),
+                                    ),
+                                  ),
+                                ),
+                              ),
                               itemBuilder: (context, index) {
                                 final order = paginatedOrders[index];
                                 final realIndex = index;
@@ -2250,289 +2821,15 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                     10000 -
                                     (order['prixPercent'] / 100 * 10000);
 
-                                return Card(
-                                  margin: const EdgeInsets.symmetric(
-                                    vertical: 6,
-                                    horizontal: 4,
-                                  ),
-                                  elevation: 4,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(16),
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          Colors.white,
-                                          Colors.grey.shade50,
-                                        ],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ),
-                                    ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(16),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Client: ${order['client']}',
-                                            style: GoogleFonts.poppins(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16,
-                                              color: Colors.grey.shade800,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            'Produit: ${order['product']}',
-                                            style: GoogleFonts.poppins(
-                                              fontSize: 14,
-                                              color: Colors.grey.shade700,
-                                            ),
-                                          ),
-                                          Text(
-                                            'Quantité: ${order['quantity']}',
-                                            style: GoogleFonts.poppins(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                              color: Colors.green.shade700,
-                                            ),
-                                          ),
-                                          Text(
-                                            'Pourcentage %: ${order['prixPercent']}%',
-                                            style: GoogleFonts.poppins(
-                                              fontSize: 14,
-                                              color: Colors.grey.shade700,
-                                            ),
-                                          ),
-                                          Text(
-                                            'Prix: ${price.toStringAsFixed(2)}',
-                                            style: GoogleFonts.poppins(
-                                              fontSize: 14,
-                                              color: Colors.grey.shade700,
-                                            ),
-                                          ),
-                                          Row(
-                                            children: <Widget>[
-                                              const Text('Numero Telephone: '),
-                                              Expanded(
-                                                child: Text(
-                                                  order['number']?.toString() ??
-                                                      '',
-                                                ),
-                                              ),
-                                              IconButton(
-                                                icon: const Icon(
-                                                  Icons.copy,
-                                                  size: 18,
-                                                ),
-                                                padding: EdgeInsets.zero,
-                                                constraints:
-                                                    const BoxConstraints(),
-                                                tooltip: 'Copy number',
-                                                onPressed: () {
-                                                  final numberToCopy =
-                                                      order['number']
-                                                          ?.toString() ??
-                                                      '';
-                                                  if (numberToCopy.isNotEmpty) {
-                                                    Clipboard.setData(
-                                                      ClipboardData(
-                                                        text: numberToCopy,
-                                                      ),
-                                                    );
-                                                    ScaffoldMessenger.of(
-                                                      context,
-                                                    ).showSnackBar(
-                                                      SnackBar(
-                                                        content: Text(
-                                                          'Numéro "$numberToCopy" copié!',
-                                                        ),
-                                                      ),
-                                                    );
-                                                  } else {
-                                                    ScaffoldMessenger.of(
-                                                      context,
-                                                    ).showSnackBar(
-                                                      const SnackBar(
-                                                        content: Text(
-                                                          'Rien à copié!.',
-                                                        ),
-                                                      ),
-                                                    );
-                                                  }
-                                                },
-                                              ),
-                                            ],
-                                          ),
-                                          Text(
-                                            'Etat Commande: ${order['state']}',
-                                            style: TextStyle(
-                                              color: _stateColor(
-                                                order['state'],
-                                              ),
-                                            ),
-                                          ),
-                                          Text('Crée Par: ${order['name']}'),
-                                          Text(
-                                            'Etat Val: ${order['accepted'] ?? false ? "Valide" : "Non Valide"}',
-                                            style: TextStyle(
-                                              color:
-                                                  (order['accepted'] ?? false)
-                                                  ? Colors.green
-                                                  : Colors.red,
-                                            ),
-                                          ),
-
-                                          Text(
-                                            'Accépté: ${order['acceptedBy']}',
-                                          ),
-                                          Text(
-                                            'Date: ${DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.parse(order['date']))}',
-                                          ),
-                                          const SizedBox(height: 8),
-                                          if (isAdminn)
-                                            Wrap(
-                                              alignment: WrapAlignment.end,
-                                              children: [
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.check,
-                                                    color: Colors.green,
-                                                  ),
-                                                  onPressed: () =>
-                                                      _changeOrderState(
-                                                        realIndex,
-                                                        'Effectué',
-                                                      ),
-                                                ),
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.close,
-                                                    color: Colors.red,
-                                                  ),
-                                                  onPressed: () =>
-                                                      _changeOrderState(
-                                                        realIndex,
-                                                        'Rejeté',
-                                                      ),
-                                                ),
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.phone_disabled,
-                                                    color: Colors.red,
-                                                  ),
-                                                  onPressed: () =>
-                                                      _changeOrderState(
-                                                        realIndex,
-                                                        'Numéro Incorrecte',
-                                                      ),
-                                                ),
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.money_off_csred,
-                                                    color: Colors.red,
-                                                  ),
-                                                  onPressed: () =>
-                                                      _changeOrderState(
-                                                        realIndex,
-                                                        'Probléme Solde',
-                                                      ),
-                                                ),
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.hourglass_bottom,
-                                                    color: Colors.orange,
-                                                  ),
-                                                  onPressed: () =>
-                                                      _changeOrderState(
-                                                        realIndex,
-                                                        'En Attente',
-                                                      ),
-                                                ),
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.edit,
-                                                    color: Colors.blue,
-                                                  ),
-                                                  onPressed: () =>
-                                                      _showEditDialog(
-                                                        realIndex,
-                                                      ),
-                                                ),
-                                                if (order['product'] ==
-                                                    'STORM STI')
-                                                  IconButton(
-                                                    icon: const Icon(
-                                                      FontAwesomeIcons.whatsapp,
-                                                      color: Colors.green,
-                                                    ),
-                                                    onPressed: () =>
-                                                        _sendOrderToWhatsApp(
-                                                          order,
-                                                        ),
-                                                  ),
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.delete,
-                                                    color: Colors.black,
-                                                  ),
-                                                  onPressed: () =>
-                                                      _confirmDeleteOrder(
-                                                        realIndex,
-                                                      ),
-                                                ),
-                                              ],
-                                            ),
-                                          if (isSuserr)
-                                            Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.end,
-                                              children: [
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.check,
-                                                    color: Colors.green,
-                                                  ),
-                                                  onPressed: () => handleAccept(
-                                                    true,
-                                                    realIndex,
-                                                  ),
-                                                ),
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.close,
-                                                    color: Colors.red,
-                                                  ),
-                                                  onPressed: () => handleAccept(
-                                                    false,
-                                                    realIndex,
-                                                  ),
-                                                ),
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.edit,
-                                                    color: Colors.blue,
-                                                  ),
-                                                  onPressed: () =>
-                                                      _showEditDialog(
-                                                        realIndex,
-                                                      ),
-                                                ),
-                                              ],
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                                return _buildEnhancedMobileCard(
+                                  order,
+                                  realIndex,
+                                  price.toDouble(),
                                 );
-                              }, // End of itemBuilder function
-                            ), // End of ListView.builder
-                          ), // End of Container
-                        ), // End of Expanded
+                              },
+                            ),
+                          ),
+                        ),
                         _buildPaginationControls(),
                       ],
                     );
@@ -2567,7 +2864,6 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                   _buildSortableColumn('Etat C', 'state'),
                                   _buildSortableColumn('Crée Par', 'name'),
                                   _buildSortableColumn('Etat Val', 'accepted'),
-                                  _buildSortableColumn('Accépté', 'acceptedBy'),
                                   _buildSortableColumn('Date', 'date'),
                                   if (isAdminn || isSuserr)
                                     const DataColumn(label: Text('Actions')),
@@ -2667,9 +2963,6 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                                   color: Colors.red,
                                                 ),
                                               ),
-                                      ),
-                                      DataCell(
-                                        Text(order['acceptedBy'] ?? " "),
                                       ),
                                       DataCell(
                                         Text(
@@ -3010,6 +3303,575 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           }
         });
       },
+    );
+  }
+
+  Widget _buildEnhancedMobileCard(
+    Map<String, dynamic> order,
+    int realIndex,
+    double price,
+  ) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 1),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            spreadRadius: 0,
+            blurRadius: 6,
+            offset: const Offset(0, 1),
+          ),
+        ],
+        border: Border.all(
+          color: _stateColor(order['state']).withOpacity(0.15),
+          width: 1,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // PROMINENT: Client name - largest and most visible
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    Icons.person_outline,
+                    color: Colors.blue.shade700,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    order['client'] ?? 'Client Inconnu',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: Colors.black87,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+                // State badge - smaller but visible - BOLD "Etat Commande"
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _stateColor(order['state']).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    order['state'] ?? 'En Attente',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: _stateColor(order['state']),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+
+            // PROMINENT: Product and Quantity in a bold, clear layout
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade200, width: 0.5),
+              ),
+              child: Row(
+                children: [
+                  // Product - takes most space, very prominent
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.inventory_2_outlined,
+                              color: Colors.orange.shade600,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'PRODUIT',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey.shade600,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          order['product'] ?? 'Produit Inconnu',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                            height: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(width: 12),
+
+                  // Quantity - prominent but compact
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.green.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.shopping_cart_outlined,
+                          color: Colors.green.shade700,
+                          size: 18,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'QTÉ',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        Text(
+                          '${order['quantity'] ?? 0}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade700,
+                            height: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // SECONDARY INFO: Compact and less prominent
+            // Phone number row
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.blue.shade100, width: 0.5),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.phone_outlined,
+                    color: Colors.blue.shade600,
+                    size: 14,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      order['number']?.toString() ?? 'N/A',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    padding: EdgeInsets.all(2),
+                    constraints: BoxConstraints(minWidth: 24, minHeight: 24),
+                    icon: Icon(
+                      Icons.copy,
+                      color: Colors.blue.shade600,
+                      size: 14,
+                    ),
+                    onPressed: () {
+                      final numberToCopy = order['number']?.toString() ?? '';
+                      if (numberToCopy.isNotEmpty) {
+                        Clipboard.setData(ClipboardData(text: numberToCopy));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Row(
+                              children: [
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 6),
+                                Text('Numéro copié!'),
+                              ],
+                            ),
+                            backgroundColor: Colors.green.shade600,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  if (isAdminn || isSuserr)
+                    IconButton(
+                      padding: EdgeInsets.all(2),
+                      constraints: BoxConstraints(minWidth: 24, minHeight: 24),
+                      icon: Icon(
+                        FontAwesomeIcons.whatsapp,
+                        color: Colors.green.shade600,
+                        size: 14,
+                      ),
+                      onPressed: () => _sendOrderToWhatsApp(order),
+                    ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            // Additional details in a compact grid - very subdued
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.grey.shade200, width: 0.5),
+              ),
+              child: Column(
+                children: [
+                  // Price, percentage, and ID in one row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildMiniInfoTile(
+                          Icons.attach_money,
+                          '${price.toStringAsFixed(0)} DA',
+                          'Prix',
+                          Colors.blue.shade600,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _buildMiniInfoTile(
+                          Icons.percent,
+                          '${order['prixPercent'] ?? 0}%',
+                          'Taux',
+                          Colors.purple.shade600,
+                          isBold: true,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _buildMiniInfoTile(
+                          Icons.tag,
+                          '#${order['id']}',
+                          'ID',
+                          Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  // Creator and validation in one row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildMiniInfoTile(
+                          Icons.person_outline,
+                          order['name'] ?? 'N/A',
+                          'Créé par',
+                          Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _buildMiniInfoTile(
+                          order['accepted'] ?? false
+                              ? Icons.check_circle_outline
+                              : Icons.hourglass_empty,
+                          order['accepted'] ?? false ? "Validé" : "En attente",
+                          'Validation',
+                          order['accepted'] ?? false
+                              ? Colors.green.shade600
+                              : Colors.orange.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  // Date - full width but very small
+                  _buildMiniInfoTile(
+                    Icons.access_time,
+                    DateFormat(
+                      'dd/MM/yyyy à HH:mm',
+                    ).format(DateTime.parse(order['date'])),
+                    'Date de création',
+                    Colors.grey.shade500,
+                    fullWidth: true,
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            // ACTION BUTTONS: More compact and less prominent
+            if (isAdminn) ...[
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.grey.shade200, width: 0.5),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Actions Admin',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 3,
+                      runSpacing: 3,
+                      children: [
+                        _buildSmallActionButton(
+                          'En Attente',
+                          Icons.hourglass_empty,
+                          Colors.orange,
+                          () => _changeOrderState(realIndex, 'En Attente'),
+                        ),
+                        _buildSmallActionButton(
+                          'Effectué',
+                          Icons.check_circle,
+                          Colors.green,
+                          () => _changeOrderState(realIndex, 'Effectué'),
+                        ),
+                        _buildSmallActionButton(
+                          'Rejeté',
+                          Icons.cancel,
+                          Colors.red,
+                          () => _changeOrderState(realIndex, 'Rejeté'),
+                        ),
+                        _buildSmallActionButton(
+                          'Num. Incorrect',
+                          Icons.phone_disabled,
+                          Colors.orange,
+                          () =>
+                              _changeOrderState(realIndex, 'Numéro Incorrecte'),
+                        ),
+                        _buildSmallActionButton(
+                          'Prob. Solde',
+                          Icons.money_off,
+                          Colors.purple,
+                          () => _changeOrderState(realIndex, 'Problème Solde'),
+                        ),
+                        _buildSmallActionButton(
+                          'Modifier',
+                          Icons.edit,
+                          Colors.blue,
+                          () => _showEditDialog(realIndex),
+                        ),
+                        _buildSmallActionButton(
+                          'Supprimer',
+                          Icons.delete,
+                          Colors.red,
+                          () => _confirmDeleteOrder(realIndex),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (isSuserr && !isAdminn) ...[
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.blue.shade200, width: 0.5),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Actions SuperUser',
+                      style: GoogleFonts.poppins(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blue.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildSmallActionButton(
+                            'Accepter',
+                            Icons.check,
+                            Colors.green,
+                            () => handleAccept(true, realIndex),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: _buildSmallActionButton(
+                            'Refuser',
+                            Icons.close,
+                            Colors.red,
+                            () => handleAccept(false, realIndex),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSmallActionButton(
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onPressed,
+  ) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 12, color: Colors.white),
+      label: Text(
+        label,
+        style: GoogleFonts.poppins(
+          fontSize: 9,
+          fontWeight: FontWeight.w500,
+          color: Colors.white,
+        ),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+        elevation: 1,
+        minimumSize: const Size(0, 28),
+      ),
+    );
+  }
+
+  Widget _buildMiniInfoTile(
+    IconData icon,
+    String value,
+    String label,
+    Color color, {
+    bool fullWidth = false,
+    bool isBold = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.grey.shade200, width: 0.5),
+      ),
+      child: fullWidth
+          ? Row(
+              children: [
+                Icon(icon, color: color, size: 12),
+                const SizedBox(width: 4),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: GoogleFonts.poppins(
+                        fontSize: 9,
+                        color: Colors.grey.shade600,
+                        fontWeight: isBold
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                    ),
+                    Text(
+                      value,
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+                        color: color,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : Column(
+              children: [
+                Icon(icon, color: color, size: 12),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: GoogleFonts.poppins(
+                    fontSize: 9,
+                    color: Colors.grey.shade600,
+                    fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                Text(
+                  value,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+                    color: color,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
     );
   }
 

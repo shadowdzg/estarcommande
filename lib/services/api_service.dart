@@ -1,9 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../core/config/app_config.dart';
-import '../core/utils/error_handler.dart';
-import '../core/utils/logger.dart';
 
 class ApiException implements Exception {
   final String message;
@@ -32,7 +29,7 @@ class ApiResponse<T> {
 }
 
 class ApiService {
-  static const String baseUrl = 'http://92.222.248.113:3000/api/v1';
+  static const String baseUrl = 'http://estcommand.ddns.net:8080/api/v1';
   static const Duration defaultTimeout = Duration(seconds: 30);
 
   // Singleton pattern
@@ -115,13 +112,19 @@ class ApiService {
     Map<String, dynamic>? data,
     http.Response response,
   ) {
+    print('=== API SERVICE REQUEST DEBUG ===');
     print('[$method] $endpoint -> ${response.statusCode}');
+    print('Full URL: $baseUrl$endpoint');
     if (data != null) {
       print('Request body: ${jsonEncode(data)}');
     }
+    print('Response Headers: ${response.headers}');
     if (response.statusCode >= 400) {
       print('Error response: ${response.body}');
+    } else {
+      print('Success response length: ${response.body.length}');
     }
+    print('==================================');
   }
 
   void _logError(String method, String endpoint, dynamic error) {
