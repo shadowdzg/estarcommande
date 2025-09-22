@@ -387,7 +387,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   Future<void> _loadWebSocketSettings() async {
     final prefs = await SharedPreferences.getInstance();
     _useLocalServer = prefs.getBool('use_local_server') ?? false;
-    _enableWebSocket = prefs.getBool('enable_websocket') ?? true;
+    _enableWebSocket =
+        prefs.getBool('enable_websocket') ?? false; // Disable by default
     await _testConnection();
     if (mounted && !_isDisposed) setState(() {});
   }

@@ -727,9 +727,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       }
 
       // Check if WebSocket is enabled in settings
-      final isWebSocketEnabled = prefs.getBool('enable_websocket') ?? true;
+      final isWebSocketEnabled = prefs.getBool('enable_websocket') ?? false;
       if (!isWebSocketEnabled) {
-        print('DEBUG: WebSocket disabled in settings, skipping connection');
+        print('DEBUG: WebSocket disabled in settings, using HTTP polling only');
         return;
       }
 

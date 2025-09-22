@@ -22,7 +22,9 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
   List<dynamic> _delegatesList = [];
   bool isAdmin = false;
   bool isSuperUser = false;
-  String _searchQuery = '';
+  bool _isLoading = false;
+  bool _hasError = false;
+  String _errorMessage = '';
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -34,67 +36,45 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
   }
 
   Future<void> _initializeData() async {
-    await fetchZoneData();
-    await _fetchDelegatesList();
+    if (!_isLoading) {
+      await fetchZoneData();
+      await _fetchDelegatesList();
+    }
   }
 
   Future<void> _fetchDelegatesList() async {
     try {
-      print('Starting to fetch delegates...');
-
       // Try to fetch all users first, then filter for delegates
       // Following the same pattern as settings.dart - no auth header
-      final response = await http.get(
-        Uri.parse('http://estcommand.ddns.net:8080/api/v1/users'),
-      );
-
-      print('API Response status: ${response.statusCode}');
+      final response = await http
+          .get(Uri.parse('http://estcommand.ddns.net:8080/api/v1/users'))
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw Exception('Request timeout');
+            },
+          );
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
 
-        print('Total users received: ${data.length}');
-        print(
-          'Sample user fields: ${data.isNotEmpty ? data.first.keys.toList() : 'No users'}',
-        );
-        if (data.isNotEmpty) {
-          print('Sample user data: ${data.first}');
-          print('All user fields: ${data.first.keys.toList()}');
-        }
-
         // Filter users to get only delegates (users with isDelegue = 1)
         final delegates = data.where((user) {
           final isDelegue = user['isDelegue'];
-          print(
-            'User ${user['username']}: isDelegue = $isDelegue (${isDelegue.runtimeType})',
-          );
-
           // Check for numeric 1 (database stores roles as 1/0)
           bool isDelegate = isDelegue == 1;
-          print('  -> Is delegate: $isDelegate');
-
           return isDelegate;
         }).toList();
 
         setState(() {
           _delegatesList = delegates;
         });
-
-        print(
-          'Fetched ${delegates.length} delegates from ${data.length} total users',
-        );
-        print('Delegates: ${delegates.map((d) => d['username']).toList()}');
       } else {
-        print('Failed to load users: ${response.statusCode}');
-        print('Response body: ${response.body}');
-
         // If /users endpoint doesn't work, try a different approach
         // Let's try to get delegates from zones endpoint
         await _fetchDelegatesFromZones();
       }
     } catch (e) {
-      print('Error fetching delegates: $e');
-      print('Error details: ${e.toString()}');
       // Fallback: try to get delegates from zones
       await _fetchDelegatesFromZones();
     }
@@ -120,51 +100,75 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
       setState(() {
         _delegatesList = uniqueDelegates.toList();
       });
-
-      print('Extracted ${_delegatesList.length} delegates from zone data');
     } catch (e) {
-      print('Error extracting delegates from zones: $e');
+      // Error extracting delegates from zones
     }
   }
 
   Future<void> fetchZoneData() async {
+    // Prevent multiple simultaneous calls
+    if (_isLoading) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token');
 
       if (token == null) {
-        print('No auth token found');
-        return;
-      }
-
-      final response = await http.get(
-        Uri.parse('http://estcommand.ddns.net:8080/api/v1/zones'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final List<dynamic> data = json.decode(response.body);
-        if (data.isNotEmpty) {
-          print('Sample zone data: ${data.first}');
-          print('All zone fields: ${data.first.keys.toList()}');
-        }
-        setState(() {
-          _zoneData = data;
-          _filteredZoneData = data; // Initialize filtered data
-        });
-      } else {
-        print('Failed to load data: ${response.statusCode}');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: const Row(
                 children: [
-                  Icon(Icons.warning, color: Colors.white),
+                  Icon(Icons.error_outline, color: Colors.white),
                   SizedBox(width: 8),
-                  Text('Erreur lors du chargement des données'),
+                  Text('Token d\'authentification manquant'),
+                ],
+              ),
+              backgroundColor: Colors.red.shade600,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
+      final response = await http
+          .get(
+            Uri.parse('http://estcommand.ddns.net:8080/api/v1/zones'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+          )
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw Exception('Request timeout');
+            },
+          );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final List<dynamic> data = json.decode(response.body);
+        setState(() {
+          _zoneData = data;
+          _filteredZoneData = data; // Initialize filtered data
+        });
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.warning, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Text('Erreur ${response.statusCode}: ${response.body}'),
                 ],
               ),
               backgroundColor: Colors.orange.shade600,
@@ -177,15 +181,14 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
         }
       }
     } catch (e) {
-      print('Error fetching data: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Row(
+            content: Row(
               children: [
-                Icon(Icons.error_outline, color: Colors.white),
-                SizedBox(width: 8),
-                Text('Erreur de connexion'),
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 8),
+                Text('Erreur de connexion: ${e.toString()}'),
               ],
             ),
             backgroundColor: Colors.red.shade600,
@@ -195,6 +198,12 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
             ),
           ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -205,79 +214,183 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
     String delegateName,
     String zoneName,
   ) async {
+    print('=== DELEGATE ASSIGNMENT START ===');
+    print('Zone ID: $zoneId');
+    print('Delegate ID: $delegateId');
+    print('Delegate Name: $delegateName');
+    print('Zone Name: $zoneName');
+
+    // First, let's test if the API endpoint is reachable
+    print('Testing API endpoint reachability...');
+    try {
+      final testResponse = await http
+          .get(
+            Uri.parse('http://estcommand.ddns.net:8080/api/v1/zones'),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 5));
+      print('API endpoint test - Status: ${testResponse.statusCode}');
+    } catch (e) {
+      print('API endpoint test failed: $e');
+    }
+
+    // Show loading indicator
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text('Assignation en cours...'),
+            ],
+          ),
+          backgroundColor: Colors.blue.shade600,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token');
 
       if (token == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.error_outline, color: Colors.white),
-                SizedBox(width: 8),
-                Text('Token d\'authentification non trouvé'),
-              ],
+        print('ERROR: No auth token found');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.error_outline, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text('Token d\'authentification non trouvé'),
+                ],
+              ),
+              backgroundColor: Colors.red.shade600,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-            backgroundColor: Colors.red.shade600,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
+          );
+        }
         return;
       }
 
-      final response = await http.patch(
-        Uri.parse(
-          'http://estcommand.ddns.net:8080/api/v1/zones/assign-user/$zoneId',
-        ),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: json.encode({'userID': delegateId}),
+      print(
+        'Making API call to: http://estcommand.ddns.net:8080/api/v1/zones/assign-user/$zoneId',
       );
+      print('Request body: ${json.encode({'userID': delegateId})}');
 
-      print('Assignment API response: ${response.statusCode}');
-      print('Response body: ${response.body}');
-      print('Zone ID sent: $zoneId');
-      print('Delegate ID sent: $delegateId');
-      print('Delegate ID type: ${delegateId.runtimeType}');
+      final response = await http
+          .patch(
+            Uri.parse(
+              'http://estcommand.ddns.net:8080/api/v1/zones/assign-user/$zoneId',
+            ),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+            body: json.encode({'userID': delegateId}),
+          )
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              print('ERROR: API request timed out after 30 seconds');
+              throw Exception('Request timeout');
+            },
+          );
+
+      print('API Response received:');
+      print('Status Code: ${response.statusCode}');
+      print('Response Headers: ${response.headers}');
+      print('Response Body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        print('SUCCESS: Assignment successful');
+        print('Refreshing zone data...');
+
         // Refresh zone data to reflect the change
         await fetchZoneData();
 
+        print('Zone data refreshed successfully');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Région "$zoneName" assignée à $delegateName avec succès',
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green.shade600,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        }
+        print('=== DELEGATE ASSIGNMENT SUCCESS ===');
+      } else {
+        print('ERROR: Assignment failed');
+        print('Status Code: ${response.statusCode}');
+        print('Response Body: ${response.body}');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Échec de l\'assignation (${response.statusCode}): ${response.body}',
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.red.shade600,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        }
+        print('=== DELEGATE ASSIGNMENT FAILED ===');
+      }
+    } catch (e) {
+      print('EXCEPTION: Assignment error');
+      print('Error: $e');
+      print('Error type: ${e.runtimeType}');
+      print('Stack trace: ${StackTrace.current}');
+
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.check_circle, color: Colors.white),
+                const Icon(Icons.error_outline, color: Colors.white),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    'Région "$zoneName" assignée à $delegateName avec succès',
-                  ),
+                  child: Text('Erreur lors de l\'assignation: ${e.toString()}'),
                 ),
-              ],
-            ),
-            backgroundColor: Colors.green.shade600,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.error_outline, color: Colors.white),
-                SizedBox(width: 8),
-                Text('Échec de l\'assignation de la région'),
               ],
             ),
             backgroundColor: Colors.red.shade600,
@@ -288,24 +401,7 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
           ),
         );
       }
-    } catch (e) {
-      print('Error assigning region: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.error_outline, color: Colors.white),
-              SizedBox(width: 8),
-              Text('Erreur lors de l\'assignation'),
-            ],
-          ),
-          backgroundColor: Colors.red.shade600,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
+      print('=== DELEGATE ASSIGNMENT EXCEPTION ===');
     }
   }
 
@@ -335,8 +431,6 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
       }
 
       // Send empty userID to remove the assignment
-      print('Attempting to remove delegate from zone: $zoneId');
-
       final response = await http.patch(
         Uri.parse(
           'http://estcommand.ddns.net:8080/api/v1/zones/assign-user/$zoneId',
@@ -348,13 +442,8 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
         body: json.encode({'userID': ''}), // Try empty string first
       );
 
-      print('Remove assignment API response: ${response.statusCode}');
-      print('Response body: ${response.body}');
-      print('Zone ID sent: $zoneId');
-
       // If empty string doesn't work, try with null
       if (response.statusCode != 200 && response.statusCode != 201) {
-        print('Empty string failed, trying with null value...');
         final response2 = await http.patch(
           Uri.parse(
             'http://estcommand.ddns.net:8080/api/v1/zones/assign-user/$zoneId',
@@ -365,9 +454,6 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
           },
           body: json.encode({'userID': null}),
         );
-
-        print('Second attempt API response: ${response2.statusCode}');
-        print('Second attempt response body: ${response2.body}');
 
         if (response2.statusCode == 200 || response2.statusCode == 201) {
           // Second attempt succeeded
@@ -395,9 +481,6 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
           return;
         } else {
           // Both attempts failed
-          print('Both removal attempts failed');
-          print('First response: ${response.statusCode} - ${response.body}');
-          print('Second response: ${response2.statusCode} - ${response2.body}');
         }
       } else {
         // First attempt succeeded
@@ -443,7 +526,6 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
         ),
       );
     } catch (e) {
-      print('Error removing delegate from region: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Row(
@@ -465,7 +547,6 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
 
   void _filterZones(String query) {
     setState(() {
-      _searchQuery = query;
       if (query.isEmpty) {
         _filteredZoneData = _zoneData;
       } else {
@@ -746,23 +827,19 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
                                 onTap: () {
                                   Navigator.of(context).pop();
 
-                                  // Debug all available fields
-                                  print('=== DELEGATE ASSIGNMENT DEBUG ===');
-                                  print(
-                                    'Available delegate fields: ${delegate.keys.toList()}',
-                                  );
+                                  // Debug: Show delegate and zone data
+                                  print('=== ID EXTRACTION DEBUG ===');
                                   print('Delegate data: $delegate');
-                                  print(
-                                    'Available zone fields: ${zone.keys.toList()}',
-                                  );
                                   print('Zone data: $zone');
+                                  print(
+                                    'Delegate keys: ${delegate.keys.toList()}',
+                                  );
+                                  print('Zone keys: ${zone.keys.toList()}');
 
                                   // Try to find the appropriate ID field for UUID
                                   // Check various possible UUID field names
                                   String userId = '';
-                                  print(
-                                    'Searching for user ID in delegate fields: ${delegate.keys.toList()}',
-                                  );
+                                  print('Searching for userId in delegate...');
                                   for (String key in [
                                     'userID',
                                     'uuid',
@@ -774,14 +851,14 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
                                     'id',
                                   ]) {
                                     print(
-                                      'Checking delegate field "$key": ${delegate[key]}',
+                                      'Checking delegate key "$key": ${delegate[key]}',
                                     );
                                     if (delegate.containsKey(key) &&
                                         delegate[key] != null &&
                                         delegate[key].toString().isNotEmpty) {
                                       userId = delegate[key].toString();
                                       print(
-                                        'Found user ID in field "$key": $userId',
+                                        'Found userId in key "$key": $userId',
                                       );
                                       break;
                                     }
@@ -790,11 +867,14 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
                                   // If still empty, try any field that looks like a UUID
                                   if (userId.isEmpty) {
                                     print(
-                                      'No user ID found in standard fields, checking all fields for UUID pattern...',
+                                      'No userId found in standard keys, searching all delegate keys...',
                                     );
                                     for (String key in delegate.keys) {
                                       String value =
                                           delegate[key]?.toString() ?? '';
+                                      print(
+                                        'Checking delegate key "$key": "$value"',
+                                      );
                                       // UUID pattern: 8-4-4-4-12 characters with hyphens
                                       if (value.length == 36 &&
                                           value.contains('-') &&
@@ -804,7 +884,7 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
                                           ).hasMatch(value)) {
                                         userId = value;
                                         print(
-                                          'Found UUID-like value in field "$key": $userId',
+                                          'Found UUID-like userId in key "$key": $userId',
                                         );
                                         break;
                                       }
@@ -812,6 +892,7 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
                                   }
 
                                   String zoneId = '';
+                                  print('Searching for zoneId in zone...');
                                   for (String key in [
                                     'zoneID',
                                     'uuid',
@@ -822,32 +903,40 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
                                     'ID',
                                     'id',
                                   ]) {
+                                    print(
+                                      'Checking zone key "$key": ${zone[key]}',
+                                    );
                                     if (zone.containsKey(key) &&
                                         zone[key] != null) {
                                       zoneId = zone[key].toString();
                                       print(
-                                        'Found zone ID in field "$key": $zoneId',
+                                        'Found zoneId in key "$key": $zoneId',
                                       );
                                       break;
                                     }
                                   }
 
-                                  print('Final userId: "$userId"');
-                                  print('Final zoneId: "$zoneId"');
-                                  print('==================================');
+                                  print('Final extracted userId: "$userId"');
+                                  print('Final extracted zoneId: "$zoneId"');
+                                  print('=== ID EXTRACTION COMPLETE ===');
 
                                   if (userId.isEmpty || zoneId.isEmpty) {
+                                    print(
+                                      'ERROR: Missing IDs - userId: "$userId", zoneId: "$zoneId"',
+                                    );
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
-                                        content: const Row(
+                                        content: Row(
                                           children: [
-                                            Icon(
+                                            const Icon(
                                               Icons.error_outline,
                                               color: Colors.white,
                                             ),
-                                            SizedBox(width: 8),
-                                            Text(
-                                              'Erreur: ID utilisateur ou zone manquant',
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                'IDs manquants - userId: "$userId", zoneId: "$zoneId"',
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -858,6 +947,26 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
                                             10,
                                           ),
                                         ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  print(
+                                    'Proceeding with assignment - userId: "$userId", zoneId: "$zoneId"',
+                                  );
+
+                                  // Validate IDs before proceeding
+                                  if (userId.length < 3 || zoneId.length < 3) {
+                                    print(
+                                      'ERROR: IDs too short - userId length: ${userId.length}, zoneId length: ${zoneId.length}',
+                                    );
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'IDs invalides - trop courts',
+                                        ),
+                                        backgroundColor: Colors.red.shade600,
                                       ),
                                     );
                                     return;
@@ -1577,7 +1686,30 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
 
               // Stats Grid
               Expanded(
-                child: _filteredZoneData.isEmpty && _zoneData.isNotEmpty
+                child: _isLoading
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.analytics,
+                              size: 64,
+                              color: Colors.grey.shade400,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Chargement des statistiques...',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            const CircularProgressIndicator(),
+                          ],
+                        ),
+                      )
+                    : _filteredZoneData.isEmpty && _zoneData.isNotEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -1612,20 +1744,45 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(
-                              Icons.analytics,
+                              _hasError ? Icons.error_outline : Icons.analytics,
                               size: 64,
-                              color: Colors.grey.shade400,
+                              color: _hasError
+                                  ? Colors.red.shade400
+                                  : Colors.grey.shade400,
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              'Chargement des statistiques...',
+                              _hasError
+                                  ? 'Erreur de chargement'
+                                  : 'Aucune donnée disponible',
                               style: TextStyle(
                                 fontSize: 16,
                                 color: Colors.grey.shade600,
                               ),
                             ),
-                            const SizedBox(height: 24),
-                            const CircularProgressIndicator(),
+                            const SizedBox(height: 8),
+                            Text(
+                              _hasError
+                                  ? _errorMessage
+                                  : 'Vérifiez votre connexion',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey.shade500,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                _initializeData();
+                              },
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Réessayer'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue.shade600,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
                           ],
                         ),
                       )
@@ -1751,28 +1908,35 @@ class _SalesStatsPageState extends State<SalesStatsPage> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: isMobile ? 6 : 8,
-                            vertical: isMobile ? 3 : 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _getPerformanceColor(taux).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(
-                              isMobile ? 10 : 12,
+                        SizedBox(width: isMobile ? 4 : 6),
+                        Flexible(
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: isMobile ? 6 : 8,
+                              vertical: isMobile ? 3 : 4,
                             ),
-                            border: Border.all(
+                            decoration: BoxDecoration(
                               color: _getPerformanceColor(
                                 taux,
-                              ).withOpacity(0.3),
+                              ).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(
+                                isMobile ? 10 : 12,
+                              ),
+                              border: Border.all(
+                                color: _getPerformanceColor(
+                                  taux,
+                                ).withOpacity(0.3),
+                              ),
                             ),
-                          ),
-                          child: Text(
-                            '${(taux * 100).toStringAsFixed(1)}%',
-                            style: TextStyle(
-                              fontSize: isMobile ? 12 : 14,
-                              fontWeight: FontWeight.bold,
-                              color: _getPerformanceColor(taux),
+                            child: Text(
+                              '${(taux * 100).toStringAsFixed(1)}%',
+                              style: TextStyle(
+                                fontSize: isMobile ? 12 : 14,
+                                fontWeight: FontWeight.bold,
+                                color: _getPerformanceColor(taux),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ),
@@ -1857,5 +2021,4 @@ Future<void> setAdminRolesForTesting() async {
     'isclient': false,
   };
   await prefs.setString('roles', jsonEncode(roles));
-  print('Admin roles set for testing: $roles');
 }
