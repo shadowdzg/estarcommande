@@ -21,39 +21,78 @@ class _ChatBotPageState extends State<ChatBotPage> {
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
 
+  // Helper functions for role checking
+  Map<String, dynamic> _decodeJwtPayload(String token) {
+    final parts = token.split('.');
+    if (parts.length != 3) {
+      throw Exception('Invalid JWT');
+    }
+    final payload = parts[1];
+    final normalized = base64.normalize(payload);
+    final decoded = utf8.decode(base64.decode(normalized));
+    return json.decode(decoded);
+  }
+
+  Future<bool?> _isDelegue() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      if (token.isEmpty) return false;
+      final payload = _decodeJwtPayload(token);
+      return payload['isDelegue'] == 1;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<String?> _getUserRegion() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      if (token.isEmpty) return null;
+      final payload = _decodeJwtPayload(token);
+      return payload['region'];
+    } catch (e) {
+      return null;
+    }
+  }
+
   // Preset queries for sales analysis
   final List<Map<String, String>> _presetQueries = [
     {
       'title': 'أفضل 10 عملاء',
-      'query': 'من هم أفضل 10 عملاء من حيث إجمالي الطلبات والإيرادات؟',
+      'query':
+          'من هم أفضل 10 عملاء من حيث إجمالي الطلبات والإيرادات مع تحليل نشاطهم الحالي؟',
       'icon': '👑',
     },
     {
       'title': 'إحصائيات المبيعات',
       'query':
-          'أعطني ملخص شامل لإحصائيات المبيعات: إجمالي المبيعات، عدد الطلبات، متوسط قيمة الطلب',
+          'أعطني ملخص شامل لإحصائيات المبيعات: إجمالي المبيعات، عدد الطلبات، متوسط قيمة الطلب، والاتجاهات الزمنية',
       'icon': '📊',
     },
     {
       'title': 'المنتجات الأكثر مبيعاً',
-      'query': 'ما هي المنتجات الأكثر مبيعاً وكم عدد الطلبات لكل منتج؟',
+      'query':
+          'ما هي المنتجات الأكثر مبيعاً وكم عدد الطلبات لكل منتج مع تحليل اتجاهات المبيعات؟',
       'icon': '🏆',
     },
     {
       'title': 'حالة الطلبات',
-      'query': 'ما هو توزيع حالات الطلبات (معلقة، مكتملة، ملغية)؟',
+      'query':
+          'ما هو توزيع حالات الطلبات (معلقة، مكتملة، ملغية) مع تحليل زمني للأداء؟',
       'icon': '📋',
     },
     {
       'title': 'العملاء غير النشطين',
       'query':
-          'من هم العملاء الذين لم يقوموا بطلبات مؤخراً أو لديهم نشاط منخفض؟',
+          'من هم العملاء الذين لم يقوموا بطلبات منذ أكثر من 10 أيام؟ وما هي استراتيجيات إعادة تنشيطهم؟',
       'icon': '😴',
     },
     {
-      'title': 'اتجاهات المبيعات',
+      'title': 'اتجاهات النشاط',
       'query':
-          'ما هي اتجاهات المبيعات الشهرية والأسبوعية؟ هل هناك نمو أم انخفاض؟',
+          'حلل أنماط نشاط العملاء: من النشطون، المتوسطون، وغير النشطين؟ وما معدل تكرار الطلبات لكل فئة؟',
       'icon': '📈',
     },
   ];
@@ -85,15 +124,31 @@ class _ChatBotPageState extends State<ChatBotPage> {
       return;
     }
 
-    // Fetch a limited number of recent orders for analysis
+    // Check if user is delegue and get their region
+    bool userIsDelegue = await _isDelegue() ?? false;
+    String? userRegion;
+
+    if (userIsDelegue) {
+      userRegion = await _getUserRegion();
+    }
+
+    // Fetch all orders for comprehensive analysis
     final Map<String, String> queryParams = {
       'skip': '0',
-      'take': '1000', // Get only the last 1000 orders for analysis
+      'take': '999999', // Get all available orders for analysis
     };
 
-    final uri = Uri.parse(
-      'http://92.222.248.113:3000/api/v1/commands',
-    ).replace(queryParameters: queryParams);
+    final String baseUrl;
+    if (userIsDelegue && userRegion != null) {
+      // Use zone-specific endpoint for delegue users
+      baseUrl =
+          'http://estcommand.ddns.net:8080/api/v1/commands/zone/$userRegion';
+    } else {
+      // Use regular endpoint for admin/superuser/client users
+      baseUrl = 'http://estcommand.ddns.net:8080/api/v1/commands';
+    }
+
+    final uri = Uri.parse(baseUrl).replace(queryParameters: queryParams);
 
     try {
       final response = await http.get(
@@ -136,7 +191,7 @@ class _ChatBotPageState extends State<ChatBotPage> {
         if (allOrders.isNotEmpty) {
           _addMessage(
             "🤖",
-            "تم تحميل ${allOrders.length} طلب بنجاح! يمكنك الآن طرح أسئلتك حول تحليل المبيعات أو استخدام الأزرار السريعة أدناه.",
+            "تم تحميل ${allOrders.length} طلب بنجاح من جميع الطلبات المتاحة! يمكنك الآن طرح أسئلتك حول تحليل المبيعات أو استخدام الأزرار السريعة أدناه.",
           );
         } else {
           _addMessage(
@@ -185,7 +240,7 @@ class _ChatBotPageState extends State<ChatBotPage> {
 
   Future<String> askLLM(String prompt) async {
     final apiKey =
-        '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'; // Get from openrouter.ai
+        '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'; // Get from openrouter.ai
     final url = Uri.parse('https://openrouter.ai/api/v1/chat/completions');
     final headers = {
       'Authorization': 'Bearer $apiKey',
@@ -199,7 +254,7 @@ class _ChatBotPageState extends State<ChatBotPage> {
         {
           "role": "system",
           "content":
-              "أنت مساعد ذكي متخصص في إحصائيات المبيعات ونشاط العملاء. يجب أن تجيب دائماً باللغة العربية. قم بتحليل البيانات المقدمة وقدم إجابات مفصلة ومفيدة بالعربية.",
+              "أنت محلل مبيعات خبير متخصص في تحليل البيانات التجارية. يجب أن تجيب دائماً باللغة العربية بتنسيق منظم وواضح. استخدم التنسيق التالي:\n\n📊 **العنوان الرئيسي**\n• النقطة الأولى\n• النقطة الثانية\n\n📈 **الاتجاهات والتحليلات**\n• تحليل مفصل مع أرقام\n• توصيات عملية\n\n⚠️ **التحديات والفرص**\n• التحديات الحالية\n• الفرص المتاحة\n\nاستخدم الرموز التعبيرية والتنسيق لجعل التحليل أكثر وضوحاً وسهولة في القراءة.",
         },
         {"role": "user", "content": prompt},
       ],
@@ -220,46 +275,90 @@ class _ChatBotPageState extends State<ChatBotPage> {
     _addMessage("أنت", userQuery);
     setState(() => _isLoading = true);
 
-    // Summarize purchase orders for context with better analysis
+    // Enhanced data analysis with proper date handling and client activity tracking
     String ordersSummary = "";
     Map<String, int> clientOrderCount = {};
     Map<String, double> clientRevenue = {};
     Map<String, int> productCount = {};
     Map<String, int> stateCount = {};
+    Map<String, List<DateTime>> clientOrderDates = {};
+    Map<String, DateTime> clientLastOrderDate = {};
+    Map<String, DateTime> clientFirstOrderDate = {};
     double totalRevenue = 0;
+    double currentMonthRevenue = 0;
+    DateTime now = DateTime.now();
+    DateTime currentMonthStart = DateTime(now.year, now.month, 1);
+    DateTime nextMonthStart = DateTime(now.year, now.month + 1, 1);
 
     for (var order in allOrders) {
-      // Build detailed summary with null safety
+      // Build detailed summary with null safety and date parsing
       double quantity = ((order['quantity'] ?? 0) as num).toDouble();
       double prix = ((order['prix'] ?? 0) as num).toDouble();
       double prixPercent = ((order['prixPercent'] ?? 0) as num).toDouble();
       String state = order['state'] ?? 'غير معروف';
-      
+      String dateString = order['date'] ?? '';
+
+      // Parse order date properly
+      DateTime? orderDate;
+      try {
+        if (dateString.isNotEmpty) {
+          orderDate = DateTime.parse(dateString);
+        }
+      } catch (e) {
+        // If parsing fails, skip date analysis for this order
+        orderDate = null;
+      }
+
       // If prix is 0, try to calculate it from percentage (assuming base price of 10000)
       if (prix == 0.0 && prixPercent > 0) {
-        prix = 10000 - (prixPercent / 100 * 10000);
+        prix =
+            10000 *
+            (prixPercent /
+                100); // Fixed: should be multiplication, not subtraction
+        print(
+          'DEBUG: Calculated prix from percentage - Original: 0, Percentage: $prixPercent%, New prix: $prix',
+        );
       }
-      
+
       // Calculate revenue only for completed orders (effectué)
       double orderRevenue = 0.0;
-      bool isCompleted = state.toLowerCase() == 'effectué' || 
-                        state.toLowerCase() == 'effectue' ||
-                        state.toLowerCase() == 'validé' ||
-                        state.toLowerCase() == 'valide' ||
-                        state.toLowerCase() == 'validated' ||
-                        state.toLowerCase() == 'completed' ||
-                        state.toLowerCase() == 'true' ||
-                        state == 'true' ||
-                        state == '1';
-      
+      bool isCompleted =
+          state.toLowerCase() == 'effectué' ||
+          state.toLowerCase() == 'effectue' ||
+          state.toLowerCase() == 'validé' ||
+          state.toLowerCase() == 'valide' ||
+          state.toLowerCase() == 'validated' ||
+          state.toLowerCase() == 'completed' ||
+          state.toLowerCase() == 'true' ||
+          state == 'true' ||
+          state == '1';
+
       if (isCompleted) {
         orderRevenue = quantity * prix;
-      }
-      
-      ordersSummary +=
-          "طلب: عميل=${order['client']}, منتج=${order['product']}, كمية=${quantity}, سعر=${prix}, نسبة=${prixPercent}%, حالة=${state}, إيراد=${orderRevenue.toStringAsFixed(2)}\n";
+        totalRevenue += orderRevenue;
 
-      // Calculate statistics
+        // Add to current month revenue if order is from current month
+        if (orderDate != null &&
+            orderDate.isAfter(currentMonthStart.subtract(Duration(days: 1))) &&
+            orderDate.isBefore(nextMonthStart)) {
+          currentMonthRevenue += orderRevenue;
+          print(
+            'DEBUG: Current month order found - Client: ${order['client']}, Date: $dateString, Revenue: $orderRevenue',
+          );
+        }
+      }
+
+      // Calculate days since order
+      String daysSinceOrder = 'غير متاح';
+      if (orderDate != null) {
+        int daysDiff = now.difference(orderDate).inDays;
+        daysSinceOrder = '$daysDiff يوم';
+      }
+
+      ordersSummary +=
+          "طلب: عميل=${order['client']}, منتج=${order['product']}, كمية=${quantity}, سعر=${prix}, نسبة=${prixPercent}%, حالة=${state}, تاريخ=${dateString}, منذ=${daysSinceOrder}, إيراد=${orderRevenue.toStringAsFixed(2)}\n";
+
+      // Calculate statistics with date tracking
       String client = order['client'] ?? 'غير معروف';
       String product = order['product'] ?? 'غير معروف';
 
@@ -267,66 +366,188 @@ class _ChatBotPageState extends State<ChatBotPage> {
       clientRevenue[client] = (clientRevenue[client] ?? 0) + orderRevenue;
       productCount[product] = (productCount[product] ?? 0) + 1;
       stateCount[state] = (stateCount[state] ?? 0) + 1;
-      totalRevenue += orderRevenue;
+
+      // Track client activity dates
+      if (orderDate != null) {
+        if (!clientOrderDates.containsKey(client)) {
+          clientOrderDates[client] = [];
+        }
+        clientOrderDates[client]!.add(orderDate);
+
+        // Update last order date
+        if (!clientLastOrderDate.containsKey(client) ||
+            orderDate.isAfter(clientLastOrderDate[client]!)) {
+          clientLastOrderDate[client] = orderDate;
+        }
+
+        // Update first order date
+        if (!clientFirstOrderDate.containsKey(client) ||
+            orderDate.isBefore(clientFirstOrderDate[client]!)) {
+          clientFirstOrderDate[client] = orderDate;
+        }
+      }
     }
 
-    // Generate statistics summary in Arabic
+    // Generate advanced statistics summary with client activity analysis
     int completedOrders = allOrders.where((order) {
       String state = order['state'] ?? '';
-      return state.toLowerCase() == 'effectué' || 
-             state.toLowerCase() == 'effectue' ||
-             state.toLowerCase() == 'validé' ||
-             state.toLowerCase() == 'valide' ||
-             state.toLowerCase() == 'validated' ||
-             state.toLowerCase() == 'completed' ||
-             state.toLowerCase() == 'true' ||
-             state == 'true' ||
-             state == '1';
+      return state.toLowerCase() == 'effectué' ||
+          state.toLowerCase() == 'effectue' ||
+          state.toLowerCase() == 'validé' ||
+          state.toLowerCase() == 'valide' ||
+          state.toLowerCase() == 'validated' ||
+          state.toLowerCase() == 'completed' ||
+          state.toLowerCase() == 'true' ||
+          state == 'true' ||
+          state == '1';
     }).length;
-    
-    // Find the date of the first order
+
+    // Find the date range of orders
     String firstOrderDate = 'غير متاح';
+    String lastOrderDate = 'غير متاح';
     if (allOrders.isNotEmpty) {
-      final sortedOrders = allOrders.toList()..sort((a, b) {
-        final aDate = a['date'] ?? '';
-        final bDate = b['date'] ?? '';
-        return aDate.compareTo(bDate);
-      });
-      firstOrderDate = sortedOrders.first['date'] ?? 'غير متاح';
+      final sortedOrders =
+          allOrders
+              .where(
+                (order) =>
+                    order['date'] != null &&
+                    order['date'].toString().isNotEmpty,
+              )
+              .toList()
+            ..sort((a, b) {
+              final aDate = a['date'] ?? '';
+              final bDate = b['date'] ?? '';
+              return aDate.compareTo(bDate);
+            });
+      if (sortedOrders.isNotEmpty) {
+        firstOrderDate = sortedOrders.first['date'] ?? 'غير متاح';
+        lastOrderDate = sortedOrders.last['date'] ?? 'غير متاح';
+      }
     }
+
+    // Analyze client activity patterns
+    List<String> activeClients = [];
+    List<String> inactiveClients = [];
+    List<String> veryInactiveClients = [];
+    Map<String, String> clientActivitySummary = {};
+
+    clientOrderDates.forEach((client, dates) {
+      if (dates.isEmpty) return;
+
+      dates.sort(); // Sort dates chronologically
+      DateTime lastOrder = dates.last;
+      DateTime firstOrder = dates.first;
+      int daysSinceLastOrder = now.difference(lastOrder).inDays;
+      int totalOrderDays = now.difference(firstOrder).inDays;
+      double orderFrequency =
+          dates.length / (totalOrderDays + 1); // orders per day
+
+      String activityStatus;
+      if (daysSinceLastOrder <= 3) {
+        activityStatus = 'نشط جداً (آخر طلب منذ ${daysSinceLastOrder} أيام)';
+        activeClients.add(client);
+      } else if (daysSinceLastOrder <= 10) {
+        activityStatus = 'نشط (آخر طلب منذ ${daysSinceLastOrder} يوم)';
+        activeClients.add(client);
+      } else if (daysSinceLastOrder <= 30) {
+        activityStatus = 'نشاط متوسط (آخر طلب منذ ${daysSinceLastOrder} يوم)';
+        inactiveClients.add(client);
+      } else {
+        activityStatus = 'غير نشط (آخر طلب منذ ${daysSinceLastOrder} يوم)';
+        veryInactiveClients.add(client);
+      }
+
+      clientActivitySummary[client] =
+          '$activityStatus - إجمالي الطلبات: ${dates.length} - معدل الطلبات: ${(orderFrequency * 30).toStringAsFixed(2)} طلب/شهر';
+    });
+
+    // Sort clients by various metrics
+    var clientsByOrders = clientOrderCount.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    var clientsByRevenue = clientRevenue.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    var productsByCount = productCount.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
 
     String statsSummary =
         """
-ملخص إحصائيات المبيعات (آخر 1000 طلب):
+ملخص إحصائيات المبيعات المتقدم (جميع الطلبات):
+
+📊 إحصائيات عامة:
 - إجمالي الطلبات: ${allOrders.length}
 - الطلبات المكتملة: $completedOrders
 - الطلبات المعلقة: ${allOrders.length - completedOrders}
-- إجمالي الإيرادات (الطلبات المكتملة فقط): ${totalRevenue.toStringAsFixed(2)} دج
-- تاريخ أول طلب في هذا التحليل: $firstOrderDate
-- حالات الطلبات الموجودة: ${stateCount.entries.map((e) => '${e.key}: ${e.value}').join(', ')}
-- أفضل 5 عملاء حسب الطلبات: ${clientOrderCount.entries.toList()..sort((a, b) => b.value.compareTo(a.value))}
-- أفضل 5 عملاء حسب الإيرادات: ${clientRevenue.entries.toList()..sort((a, b) => b.value.compareTo(a.value))}
-- أفضل المنتجات: ${productCount.entries.toList()..sort((a, b) => b.value.compareTo(a.value))}
-- توزيع حالات الطلبات: ${stateCount.entries.toList()}
+- إجمالي الإيرادات (جميع الطلبات المكتملة): ${totalRevenue.toStringAsFixed(2)} دج
+- إيرادات الشهر الحالي (${now.month}/${now.year}): ${currentMonthRevenue.toStringAsFixed(2)} دج
+- تاريخ أول طلب: $firstOrderDate
+- تاريخ آخر طلب: $lastOrderDate
+- إجمالي العملاء: ${clientOrderCount.length}
+
+👥 تحليل نشاط العملاء:
+- العملاء النشطون (آخر 10 أيام): ${activeClients.length}
+- العملاء متوسطي النشاط (10-30 يوم): ${inactiveClients.length}
+- العملاء غير النشطين (+30 يوم): ${veryInactiveClients.length}
+
+🏆 أفضل 5 عملاء حسب عدد الطلبات:
+${clientsByOrders.take(5).map((e) => '- ${e.key}: ${e.value} طلب ${clientActivitySummary[e.key] ?? ''}').join('\n')}
+
+💰 أفضل 5 عملاء حسب الإيرادات:
+${clientsByRevenue.take(5).map((e) => '- ${e.key}: ${e.value.toStringAsFixed(2)} دج ${clientActivitySummary[e.key] ?? ''}').join('\n')}
+
+📦 أفضل 5 منتجات حسب عدد الطلبات:
+${productsByCount.take(5).map((e) => '- ${e.key}: ${e.value} طلب').join('\n')}
+
+📋 توزيع حالات الطلبات:
+${stateCount.entries.map((e) => '- ${e.key}: ${e.value} طلب').join('\n')}
+
+😴 العملاء غير النشطين (لم يطلبوا منذ +30 يوم):
+${veryInactiveClients.take(10).map((client) => '- $client: ${clientActivitySummary[client] ?? 'لا توجد معلومات'}').join('\n')}
+
+⚠️ العملاء متوسطي النشاط (10-30 يوم):
+${inactiveClients.take(10).map((client) => '- $client: ${clientActivitySummary[client] ?? 'لا توجد معلومات'}').join('\n')}
 """;
 
     final prompt =
         """
-أنت محلل مبيعات خبير. إليك البيانات الكاملة لأوامر الشراء والإحصائيات:
+أنت محلل مبيعات خبير متخصص في تحليل البيانات التجارية وأنماط العملاء. إليك البيانات الكاملة والمحدثة لأوامر الشراء مع تحليل متقدم لنشاط العملاء:
 
 $statsSummary
 
-البيانات التفصيلية للطلبات:
-${ordersSummary.length > 8000 ? ordersSummary.substring(0, 8000) + '...[مقطوع]' : ordersSummary}
+البيانات التفصيلية للطلبات مع التواريخ:
+${ordersSummary.length > 6000 ? ordersSummary.substring(0, 6000) + '...[مقطوع لضمان الأداء]' : ordersSummary}
 
 سؤال المستخدم: $userQuery
 
-يرجى تقديم تحليل شامل باللغة العربية بناءً على البيانات أعلاه. اجعل إجابتك مهنية وتحليلية مع أرقام ونسب محددة حيثما أمكن.
+يرجى تقديم تحليل دقيق ومنظم باللغة العربية بالتنسيق التالي:
 
-مهم: احتفظ بإجابتك قصيرة ومركزة في 3-4 فقرات فقط. لا تكتب أكثر من ذلك.
+📊 **الملخص التنفيذي**
+• أهم 3 نقاط رئيسية من التحليل مع أرقام دقيقة
+• المؤشرات المهمة والاتجاهات
+
+📈 **التحليل التفصيلي** 
+• تحليل البيانات مع الأرقام الدقيقة والتواريخ
+• أنماط نشاط العملاء وسلوكياتهم
+• أداء المنتجات والاتجاهات الزمنية
+
+💡 **الرؤى والتوصيات**
+• توصيات عملية مبنية على البيانات الفعلية
+• استراتيجيات للتعامل مع العملاء غير النشطين
+• خطوات عملية مقترحة
+
+⚠️ **مهم جداً للدقة:**
+- عند تحليل نشاط العملاء، استخدم البيانات المقدمة أعلاه فقط
+- العملاء النشطون هم من طلبوا خلال آخر 10 أيام فقط
+- العملاء متوسطي النشاط هم من لم يطلبوا منذ 10-30 يوم
+- العملاء غير النشطين هم من لم يطلبوا منذ أكثر من 30 يوم
+- التركيز على إيرادات الشهر الحالي للتحليل المالي الحديث
+- اعتمد على التواريخ المحددة في البيانات وليس على افتراضات
+- عند ذكر أسماء العملاء أو المنتجات، ضعها بين علامتي تنصيص
+- تأكد من دقة الأرقام والإحصائيات المذكورة
+
+استخدم الرموز التعبيرية والنقاط لجعل التحليل واضحاً ومنظماً.
 """;
 
-    _addMessage("🤖", "جاري التحليل...");
+    _addMessage("🤖", "🔄 جاري تحليل البيانات مع التواريخ وأنماط النشاط...");
     _scrollToBottom();
 
     try {
@@ -357,37 +578,67 @@ ${ordersSummary.length > 8000 ? ordersSummary.substring(0, 8000) + '...[مقطو
   }
 
   double _calculateTotalRevenue() {
-    double totalRevenue = 0;
-    
+    double currentMonthRevenue = 0;
+    DateTime now = DateTime.now();
+    DateTime currentMonthStart = DateTime(now.year, now.month, 1);
+    DateTime nextMonthStart = DateTime(now.year, now.month + 1, 1);
+
+    print(
+      'DEBUG: Current month range - Start: $currentMonthStart, End: $nextMonthStart',
+    );
+    print('DEBUG: Current date: $now');
+
     for (var order in allOrders) {
       double quantity = ((order['quantity'] ?? 0) as num).toDouble();
       double prix = ((order['prix'] ?? 0) as num).toDouble();
       double prixPercent = ((order['prixPercent'] ?? 0) as num).toDouble();
       String state = order['state'] ?? '';
-      
+      String dateString = order['date'] ?? '';
+
+      // Parse order date
+      DateTime? orderDate;
+      try {
+        if (dateString.isNotEmpty) {
+          orderDate = DateTime.parse(dateString);
+        }
+      } catch (e) {
+        orderDate = null;
+      }
+
       // If prix is 0, try to calculate it from percentage (assuming base price of 10000)
       if (prix == 0.0 && prixPercent > 0) {
-        prix = 10000 - (prixPercent / 100 * 10000);
+        prix =
+            10000 *
+            (prixPercent /
+                100); // Fixed: should be multiplication, not subtraction
       }
-      
+
       // Calculate revenue only for completed orders (effectué)
-      bool isCompleted = state.toLowerCase() == 'effectué' || 
-                        state.toLowerCase() == 'effectue' ||
-                        state.toLowerCase() == 'validé' ||
-                        state.toLowerCase() == 'valide' ||
-                        state.toLowerCase() == 'validated' ||
-                        state.toLowerCase() == 'completed' ||
-                        state.toLowerCase() == 'true' ||
-                        state == 'true' ||
-                        state == '1';
-      
-      if (isCompleted) {
+      bool isCompleted =
+          state.toLowerCase() == 'effectué' ||
+          state.toLowerCase() == 'effectue' ||
+          state.toLowerCase() == 'validé' ||
+          state.toLowerCase() == 'valide' ||
+          state.toLowerCase() == 'validated' ||
+          state.toLowerCase() == 'completed' ||
+          state.toLowerCase() == 'true' ||
+          state == 'true' ||
+          state == '1';
+
+      if (isCompleted &&
+          orderDate != null &&
+          orderDate.isAfter(currentMonthStart.subtract(Duration(days: 1))) &&
+          orderDate.isBefore(nextMonthStart)) {
         double orderRevenue = quantity * prix;
-        totalRevenue += orderRevenue;
+        currentMonthRevenue += orderRevenue;
+        print(
+          'DEBUG: UI Current month order - Client: ${order['client']}, Date: $dateString, Revenue: $orderRevenue, Total so far: $currentMonthRevenue',
+        );
       }
     }
-    
-    return totalRevenue;
+
+    print('DEBUG: Final current month revenue: $currentMonthRevenue');
+    return currentMonthRevenue;
   }
 
   void _scrollToBottom() {
@@ -503,8 +754,10 @@ ${ordersSummary.length > 8000 ? ordersSummary.substring(0, 8000) + '...[مقطو
                     style: GoogleFonts.poppins(
                       color: isBot ? Colors.black87 : Colors.white,
                       fontSize: 14,
-                      height: 1.4,
+                      height: 1.6,
                     ),
+                    textDirection: TextDirection.rtl,
+                    textAlign: TextAlign.start,
                   ),
                 ],
               ),
@@ -678,7 +931,7 @@ ${ordersSummary.length > 8000 ? ordersSummary.substring(0, 8000) + '...[مقطو
                         ),
                       ),
                       Text(
-                        'إجمالي الإيرادات',
+                        'إيرادات الشهر الحالي',
                         style: GoogleFonts.poppins(
                           fontSize: 10,
                           color: Colors.grey.shade600,

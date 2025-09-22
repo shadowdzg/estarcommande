@@ -18,47 +18,106 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  bool _isLoading = false;
+  bool _isServerDown = false;
 
   void _login() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final response = await http.post(
-      Uri.parse('http://92.222.248.113:3000/api/v1/auth/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'username': emailController.text.trim(),
-        'password': passwordController.text.trim(),
-      }),
-    );
+    setState(() {
+      _isLoading = true;
+      _isServerDown = false;
+    });
 
-    print('Status code: ${response.statusCode}');
-    print('Response body: ${response.body}');
-
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      try {
-        final data = jsonDecode(response.body);
-        final token = data['access_token'];
-        final userData = data['user']; // Assuming the user data is here
-
-        if (token != null && token.isNotEmpty) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('auth_token', token);
-
-          final userid = decodeToken(token);
-          await prefs.setString('userid', userid);
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const PurchaseOrdersPage()),
+    try {
+      final response = await http
+          .post(
+            Uri.parse('http://estcommand.ddns.net:8080/api/v1/auth/login'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'username': emailController.text.trim(),
+              'password': passwordController.text.trim(),
+            }),
+          )
+          .timeout(
+            const Duration(seconds: 15),
+            onTimeout: () {
+              throw Exception(
+                'Timeout - Le serveur met trop de temps à répondre',
+              );
+            },
           );
-        } else {
-          _showError('Access token not found.');
+
+      print('Status code: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        try {
+          final data = jsonDecode(response.body);
+          final token = data['access_token'];
+          // final userData = data['user']; // Future use for user profile
+
+          if (token != null && token.isNotEmpty) {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('auth_token', token);
+
+            final userid = decodeToken(token);
+            await prefs.setString('userid', userid);
+
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const PurchaseOrdersPage()),
+              );
+            }
+          } else {
+            _showError('Access token not found.');
+          }
+        } catch (e) {
+          _showError('Failed to parse response.');
+          print('JSON decode error: $e');
         }
-      } catch (e) {
-        _showError('Failed to parse response.');
-        print('JSON decode error: $e');
+      } else if (response.statusCode == 401) {
+        _showError(
+          'Identifiants incorrects. Vérifiez votre nom d\'utilisateur et mot de passe.',
+        );
+      } else if (response.statusCode >= 500) {
+        setState(() {
+          _isServerDown = true;
+        });
+        _showError(
+          'Le serveur rencontre des difficultés. Veuillez réessayer plus tard.',
+        );
+      } else {
+        _showError(
+          'Erreur de connexion (${response.statusCode}). Veuillez réessayer.',
+        );
       }
-    } else {
-      _showError('Login failed. Check your credentials.');
+    } catch (e) {
+      print('Login error: $e');
+      setState(() {
+        _isServerDown = true;
+      });
+
+      String errorMessage = 'Erreur de connexion';
+      if (e.toString().contains('Timeout')) {
+        errorMessage =
+            'Le serveur met trop de temps à répondre. Veuillez réessayer.';
+      } else if (e.toString().contains('SocketException') ||
+          e.toString().contains('Network')) {
+        errorMessage = 'Problème de réseau. Vérifiez votre connexion internet.';
+      } else {
+        errorMessage =
+            'Le serveur semble indisponible. Veuillez réessayer plus tard.';
+      }
+
+      _showError(errorMessage);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -162,27 +221,69 @@ class _LoginPageState extends State<LoginPage> {
                               },
                             ),
                             const SizedBox(height: 32),
+                            // Server status indicator
+                            if (_isServerDown)
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                margin: const EdgeInsets.only(bottom: 16),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Colors.orange.shade200,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.warning_amber,
+                                      color: Colors.orange.shade700,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Serveur temporairement indisponible',
+                                        style: TextStyle(
+                                          color: Colors.orange.shade700,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                            // Login button
                             Container(
                               width: double.infinity,
                               height: 56,
                               decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [
-                                    Color(0xFFE57373), // Soft red
-                                    Color(0xFFD32F2F), // Medium red
-                                  ],
+                                gradient: LinearGradient(
+                                  colors: _isLoading
+                                      ? [
+                                          Colors.grey.shade400,
+                                          Colors.grey.shade500,
+                                        ]
+                                      : [
+                                          const Color(0xFFE57373), // Soft red
+                                          const Color(0xFFD32F2F), // Medium red
+                                        ],
                                 ),
                                 borderRadius: BorderRadius.circular(16),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.red.withOpacity(0.2),
+                                    color:
+                                        (_isLoading ? Colors.grey : Colors.red)
+                                            .withOpacity(0.2),
                                     blurRadius: 10,
                                     offset: const Offset(0, 4),
                                   ),
                                 ],
                               ),
                               child: ElevatedButton(
-                                onPressed: _login,
+                                onPressed: _isLoading ? null : _login,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.transparent,
                                   shadowColor: Colors.transparent,
@@ -190,14 +291,41 @@ class _LoginPageState extends State<LoginPage> {
                                     borderRadius: BorderRadius.circular(16),
                                   ),
                                 ),
-                                child: Text(
-                                  'Se connecter',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 18,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
+                                child: _isLoading
+                                    ? Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                    Colors.white,
+                                                  ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Text(
+                                            'Connexion...',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 16,
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : Text(
+                                        'Se connecter',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 18,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
                               ),
                             ),
                           ],

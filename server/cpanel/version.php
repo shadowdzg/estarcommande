@@ -13,26 +13,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // Configuration
 $config = [
     'android' => [
-        'version' => '1.0.1',
-        'buildNumber' => 2,
-        'downloadUrl' => 'https://update.eststar.dz/apps/estarcommande-android-v1.0.1.apk',
+        'version' => '2.0.1',
+        'buildNumber' => 3,
+        'downloadUrl' => 'https://update.eststar.dz/apps/estarcommande-android-v2.0.1.apk',
         'changelog' => [
-            'Nouvelles fonctionnalités de commande',
-            'Amélioration des performances',
-            'Corrections de bugs'
+            'New update system improvements',
+            'Fixed update dialog display',
+            'Better error handling',
+            'Performance optimizations'
         ],
         'isForceUpdate' => false,
         'isCriticalUpdate' => false,
         'minSupportedVersion' => '1.0.0'
     ],
     'windows' => [
-        'version' => '1.0.1',
+        'version' => '2.0.0',
         'buildNumber' => 2,
-        'downloadUrl' => 'https://update.eststar.dz/apps/estarcommande-windows-v1.0.1.zip',
+        'downloadUrl' => 'https://update.eststar.dz/apps/EST_STAR_Commande_Setup_v2.0.0.exe',
         'changelog' => [
-            'Nouvelles fonctionnalités de commande',
-            'Amélioration des performances',
-            'Corrections de bugs'
+            'overhaul ui',
+            'Smart search for clients',
+            'Modern card layouts',
+            'Improved performance'
         ],
         'isForceUpdate' => false,
         'isCriticalUpdate' => false,

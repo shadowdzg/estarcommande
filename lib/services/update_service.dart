@@ -11,43 +11,90 @@ class UpdateService {
   static const String _updateReminderKey = 'update_reminder_count';
   static const int _maxReminderCount = 3;
 
-  /// Check for updates from your custom server
-  static Future<void> checkForServerUpdate(BuildContext context) async {
+  /// Reset the last update check time to force immediate check
+  static Future<void> resetUpdateCheckTimer() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_lastUpdateCheckKey);
+    debugPrint('UpdateService: Update check timer reset');
+  }
+
+  /// Check for updates from your custom server (with option to force check)
+  static Future<void> checkForServerUpdate(
+    BuildContext context, {
+    bool forceCheck = false,
+  }) async {
     try {
+      debugPrint('UpdateService: Update check temporarily disabled');
+      return; // Temporarily disable update checks
+
+      debugPrint(
+        'UpdateService: Starting update check (forceCheck: $forceCheck)',
+      );
+
       final prefs = await SharedPreferences.getInstance();
       final lastCheck = prefs.getInt(_lastUpdateCheckKey) ?? 0;
       final currentTime = DateTime.now().millisecondsSinceEpoch;
 
-      // Check only once every 24 hours
-      if (currentTime - lastCheck < 86400000) return;
+      debugPrint(
+        'UpdateService: lastCheck: $lastCheck, currentTime: $currentTime, diff: ${currentTime - lastCheck}',
+      );
+
+      // Check only once every 24 hours unless forced
+      if (!forceCheck && currentTime - lastCheck < 86400000) {
+        debugPrint(
+          'UpdateService: Skipping update check (last check too recent)',
+        );
+        return;
+      }
 
       final packageInfo = await PackageInfo.fromPlatform();
       final currentVersion = packageInfo.version;
-      final currentBuildNumber = int.parse(packageInfo.buildNumber);
+      final currentBuildNumber = int.tryParse(packageInfo.buildNumber) ?? 1;
 
-      // Replace with your server URL
-      // Example: https://your-domain.com/app-updates/version.php
-      const serverUrl = 'https://update.eststar.dz/version.php';
+      debugPrint(
+        'UpdateService: Current version: $currentVersion+$currentBuildNumber',
+      );
+
+      // Use your working server URL
+      const serverUrl = 'http://estcommand.ddns.net:8080/api/version';
 
       final platform = Platform.isAndroid
           ? 'android'
           : Platform.isWindows
           ? 'windows'
           : 'android';
-      final response = await http.get(
-        Uri.parse(
-          '$serverUrl?platform=$platform&currentVersion=$currentVersion&buildNumber=$currentBuildNumber',
-        ),
-      );
+
+      final requestUrl =
+          '$serverUrl?platform=$platform&currentVersion=$currentVersion&buildNumber=$currentBuildNumber';
+      debugPrint('UpdateService: Request URL: $requestUrl');
+
+      final response = await http.get(Uri.parse(requestUrl));
+
+      debugPrint('UpdateService: Response status: ${response.statusCode}');
+      debugPrint('UpdateService: Response body: ${response.body}');
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+        final data = json.decode(response.body) as Map<String, dynamic>?;
+        if (data == null) {
+          debugPrint('UpdateService: Invalid JSON response');
+          return;
+        }
+
         final hasUpdate = data['hasUpdate'] as bool? ?? false;
         final isForceUpdate = data['isForceUpdate'] as bool? ?? false;
 
+        debugPrint(
+          'UpdateService: hasUpdate: $hasUpdate, isForceUpdate: $isForceUpdate',
+        );
+
         if (hasUpdate && data['latest'] != null) {
-          final latest = data['latest'];
-          final latestVersion = latest['version'] as String;
+          final latest = data['latest'] as Map<String, dynamic>?;
+          if (latest == null) {
+            debugPrint('UpdateService: Latest data is null');
+            return;
+          }
+
+          final latestVersion = latest['version'] as String? ?? 'Unknown';
           final changelog =
               (latest['changelog'] as List<dynamic>?)
                   ?.map((e) => e.toString())
@@ -58,6 +105,10 @@ class UpdateService {
               ? changelog.join('\n• ')
               : 'Une nouvelle version de l\'application est disponible.';
 
+          debugPrint(
+            'UpdateService: Showing update dialog for version: $latestVersion',
+          );
+
           await _showCustomUpdateDialog(
             context,
             latestVersion,
@@ -65,12 +116,33 @@ class UpdateService {
             isForceUpdate,
             downloadUrl: latest['downloadUrl'] as String?,
           );
+        } else {
+          debugPrint('UpdateService: No update available');
         }
 
         await prefs.setInt(_lastUpdateCheckKey, currentTime);
+      } else {
+        debugPrint(
+          'UpdateService: Server returned error: ${response.statusCode}',
+        );
       }
     } catch (e) {
-      debugPrint('Error checking for server updates: $e');
+      debugPrint('UpdateService: Error checking for server updates: $e');
+      // Optionally show error to user if context is still valid
+      try {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Erreur de vérification des mises à jour: ${e.toString()}',
+              ),
+              backgroundColor: Colors.red.shade600,
+            ),
+          );
+        }
+      } catch (contextError) {
+        debugPrint('UpdateService: Context error: $contextError');
+      }
     }
   }
 
@@ -164,7 +236,7 @@ class UpdateService {
                           isForced
                               ? 'Cette mise à jour est obligatoire pour continuer à utiliser l\'application.'
                               : Platform.isWindows
-                              ? 'Télécharger maintenant pour installer la nouvelle version.'
+                              ? 'Télécharger l\'installateur pour mettre à jour automatiquement.'
                               : 'Mettre à jour maintenant pour bénéficier des dernières fonctionnalités.',
                           style: const TextStyle(fontSize: 13),
                         ),
@@ -249,10 +321,6 @@ class UpdateService {
 
   /// Force check for updates (manual trigger)
   static Future<void> manualUpdateCheck(BuildContext context) async {
-    // Reset last check time to force immediate check
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_lastUpdateCheckKey);
-
     // Show loading
     showDialog(
       context: context,
@@ -261,40 +329,137 @@ class UpdateService {
     );
 
     try {
-      // Check for updates
-      await checkForServerUpdate(context);
+      final prefs = await SharedPreferences.getInstance();
+      final packageInfo = await PackageInfo.fromPlatform();
+      final currentVersion = packageInfo.version;
+      final currentBuildNumber = int.tryParse(packageInfo.buildNumber) ?? 1;
 
-      Navigator.of(context).pop(); // Close loading
+      // Use your working server URL
+      const serverUrl = 'http://estcommand.ddns.net:8080/api/version';
 
-      // If we reach here, no updates were found
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: 8),
-              Text('Vous utilisez la dernière version'),
-            ],
-          ),
-          backgroundColor: Colors.green.shade600,
-          behavior: SnackBarBehavior.floating,
+      final platform = Platform.isAndroid
+          ? 'android'
+          : Platform.isWindows
+          ? 'windows'
+          : 'android';
+      final response = await http.get(
+        Uri.parse(
+          '$serverUrl?platform=$platform&currentVersion=$currentVersion&buildNumber=$currentBuildNumber',
         ),
       );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body) as Map<String, dynamic>?;
+
+        if (data == null) {
+          // Close loading dialog
+          if (context.mounted) {
+            Navigator.of(context).pop();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Row(
+                  children: [
+                    Icon(Icons.error, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text('Erreur lors de la vérification des mises à jour'),
+                  ],
+                ),
+                backgroundColor: Colors.red.shade600,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+          return;
+        }
+
+        final hasUpdate = data['hasUpdate'] as bool? ?? false;
+        final isForceUpdate = data['isForceUpdate'] as bool? ?? false;
+
+        // Close loading dialog
+        if (context.mounted) {
+          Navigator.of(context).pop();
+        }
+
+        if (hasUpdate && data['latest'] != null) {
+          final latest = data['latest'] as Map<String, dynamic>?;
+          if (latest == null) return;
+
+          final latestVersion = latest['version'] as String? ?? 'Unknown';
+          final changelog =
+              (latest['changelog'] as List<dynamic>?)
+                  ?.map((e) => e.toString())
+                  .toList() ??
+              [];
+
+          final updateMessage = changelog.isNotEmpty
+              ? changelog.join('\n• ')
+              : 'Une nouvelle version de l\'application est disponible.';
+
+          await _showCustomUpdateDialog(
+            context,
+            latestVersion,
+            updateMessage,
+            isForceUpdate,
+            downloadUrl: latest['downloadUrl'] as String?,
+          );
+        } else {
+          // Show "up to date" message only if no update is available
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text('Vous utilisez la dernière version'),
+                  ],
+                ),
+                backgroundColor: Colors.green.shade600,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        }
+
+        // Update the last check time
+        final currentTime = DateTime.now().millisecondsSinceEpoch;
+        await prefs.setInt(_lastUpdateCheckKey, currentTime);
+      } else {
+        // Close loading dialog
+        if (context.mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.error, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text('Erreur lors de la vérification des mises à jour'),
+                ],
+              ),
+              backgroundColor: Colors.red.shade600,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
     } catch (e) {
-      Navigator.of(context).pop(); // Close loading
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.error, color: Colors.white),
-              SizedBox(width: 8),
-              Text('Erreur lors de la vérification des mises à jour'),
-            ],
+      if (context.mounted) {
+        Navigator.of(context).pop(); // Close loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.error, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Erreur lors de la vérification des mises à jour'),
+              ],
+            ),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
           ),
-          backgroundColor: Colors.red.shade600,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+        );
+      }
     }
   }
 

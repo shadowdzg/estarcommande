@@ -27,7 +27,7 @@ class UpdateService {
 
       // Replace with your server URL
       // Example: https://your-domain.com/app-updates/version.php
-      const serverUrl = 'https://your-domain.com/app-updates/version.php';
+      const serverUrl = 'https://update.eststar.dz/version.php';
 
       final platform = Platform.isAndroid ? 'android' : 'ios';
       final response = await http.get(
