@@ -22,6 +22,10 @@ import 'package:excel/excel.dart' as excel;
 import 'package:path/path.dart' as p;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'services/network_service.dart';
+
+// Animation imports
+import 'package:flutter/animation.dart';
 
 // Product class for database integration
 class Product {
@@ -117,6 +121,14 @@ isDelegue() async {
   return isDelegue;
 }
 
+isSuper() async {
+  final prefs = await SharedPreferences.getInstance();
+  final token = prefs.getString('auth_token') ?? '';
+  final payload = decodeJwtPayload(token);
+  final isSuper = payload['issuper'] == 1;
+  return isSuper;
+}
+
 getUserRegion() async {
   final prefs = await SharedPreferences.getInstance();
   final token = prefs.getString('auth_token') ?? '';
@@ -127,6 +139,12 @@ getUserRegion() async {
 bool isMobile() {
   return defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS;
+}
+
+bool isDesktop() {
+  return defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.linux;
 }
 
 DateTimeRange? selectedDateRange;
@@ -200,7 +218,7 @@ class _ClientSearchWidgetState extends State<ClientSearchWidget> {
         }
       },
       itemBuilder: (context, String suggestion) => ListTile(
-        leading: Icon(Icons.person, color: Colors.blue.shade600, size: 20),
+        leading: Icon(Icons.person, color: const Color(0xFFDC2626), size: 20),
         title: Text(suggestion),
         subtitle: Text('ID: ${_clientsMap[suggestion] ?? 'N/A'}'),
       ),
@@ -280,7 +298,11 @@ class _ProductSearchWidgetState extends State<ProductSearchWidget> {
             .toList();
       },
       itemBuilder: (context, Product suggestion) => ListTile(
-        leading: Icon(Icons.inventory_2, color: Colors.blue.shade600, size: 20),
+        leading: Icon(
+          Icons.inventory_2,
+          color: const Color(0xFFDC2626),
+          size: 20,
+        ),
         title: Text(suggestion.productName ?? ''),
         subtitle: Text(
           'Price: ${suggestion.initialPrice?.toStringAsFixed(2) ?? '0.00'} DA',
@@ -318,7 +340,8 @@ class PurchaseOrdersPage extends StatefulWidget {
   State<PurchaseOrdersPage> createState() => _PurchaseOrdersPageState();
 }
 
-class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
+class _PurchaseOrdersPageState extends State<PurchaseOrdersPage>
+    with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
 
   int _totalOrdersCount = 0;
@@ -339,9 +362,47 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   bool _isLoadingCache = false;
   bool _isRefreshingInBackground = false;
 
+  // ✨ Animation Controllers
+  late AnimationController _staggeredListController;
+  late AnimationController _fabController;
+  late AnimationController _searchBarController;
+  late AnimationController _shimmerController;
+  late AnimationController _rippleController;
+  late AnimationController _layoutTransitionController;
+
+  // Animation instances
+  late Animation<double> _searchBarScale;
+  late Animation<Offset> _shimmerOffset;
+
+  // State for animations
+  bool _isFabExpanded = false;
+  bool _isSearchFocused = false;
+  final List<AnimationController> _cardControllers = [];
+  final Map<String, AnimationController> _rippleControllers = {};
+
+  // 🖥️ Windows Desktop-specific animations
+  final Map<String, bool> _isHovered = {};
+  int _currentColumnCount = 1;
+
   // Connection status tracking
   bool _isConnected = true;
   String _connectionStatus = 'Connected';
+
+  // Network service for dynamic server selection
+  final NetworkService _networkService = NetworkService();
+
+  // Helper method to get the current server's base URL
+  Future<String> _getServerBaseUrl() async {
+    final serverConfig = await _networkService.getBestAvailableServer();
+    return serverConfig.url;
+  }
+
+  // Helper method to get the current server's API base URL
+  Future<String> _getApiBaseUrl() async {
+    final serverConfig = await _networkService.getBestAvailableServer();
+    return serverConfig.apiBaseUrl;
+  }
+
   Timer? _connectionCheckTimer;
 
   // Helper function to parse percentage strings like "1.5%" to double
@@ -405,15 +466,17 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     final userIsDelegue = userInfo['isDelegue'] as bool;
     final userRegion = userInfo['region'] as String?;
 
+    // Use NetworkService to get the current server's API base URL
+    final apiBaseUrl = await _getApiBaseUrl();
+
     final String baseUrl;
     if (userIsDelegue && userRegion != null) {
-      baseUrl =
-          'http://estcommand.ddns.net:8080/api/v1/commands/zone/$userRegion';
+      baseUrl = '$apiBaseUrl/commands/zone/$userRegion';
     } else {
-      baseUrl = 'http://estcommand.ddns.net:8080/api/v1/commands';
+      baseUrl = '$apiBaseUrl/commands';
     }
 
-    // Fetch ALL orders for search cache
+    // Fetch ALL orders for search cache - same for all users
     final queryParams = {
       'skip': '0',
       'take': '2377', // Get all orders
@@ -657,8 +720,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   bool _isSocketConnected = false;
 
   void _startCacheAutoRefresh() {
-    _cacheRefreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      // Periodic database refresh: 30 seconds
+    _cacheRefreshTimer = Timer.periodic(const Duration(minutes: 2), (timer) {
+      // Periodic database refresh: 2 minutes (optimized for better performance)
       if (mounted) {
         // Don't refresh cache if user is actively searching
         if (searchQuery.isEmpty) {
@@ -693,6 +756,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         print('DEBUG: No auth token for Socket.IO connection');
         return;
       }
+
+      // Superuser uses same Socket.IO as admin - no special handling needed
 
       // Debug token validity
       try {
@@ -734,7 +799,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       }
 
       // Use the same server as API calls for consistency
-      final serverUrl = 'http://estcommand.ddns.net:8080';
+      final serverUrl = await _getServerBaseUrl();
 
       print('DEBUG: WebSocket enabled: $isWebSocketEnabled');
       print('DEBUG: Connecting to Socket.IO server: $serverUrl');
@@ -959,7 +1024,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           content: Text(
             'New order from ${newOrder['name']} - ${newOrder['client']}',
           ),
-          backgroundColor: Colors.green,
+          backgroundColor: const Color(0xFF1F2937), // Dark grey for success
           duration: const Duration(seconds: 2),
         ),
       );
@@ -1117,12 +1182,14 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       final userIsDelegue = userInfo['isDelegue'] as bool;
       final userRegion = userInfo['region'] as String?;
 
+      // Use NetworkService to get the current server's API base URL
+      final apiBaseUrl = await _getApiBaseUrl();
+
       final String baseUrl;
       if (userIsDelegue && userRegion != null) {
-        baseUrl =
-            'http://estcommand.ddns.net:8080/api/v1/commands/zone/$userRegion';
+        baseUrl = '$apiBaseUrl/commands/zone/$userRegion';
       } else {
-        baseUrl = 'http://estcommand.ddns.net:8080/api/v1/commands';
+        baseUrl = '$apiBaseUrl/commands';
       }
 
       List<Map<String, dynamic>> allOrders = [];
@@ -1424,15 +1491,20 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     final userIsDelegue = userInfo['isDelegue'] as bool;
     final userRegion = userInfo['region'] as String?;
 
+    // Use NetworkService to get the current server's API base URL
+    final apiBaseUrl = await _getApiBaseUrl();
+
     final String baseUrl;
     if (userIsDelegue && userRegion != null) {
       // Use zone-specific endpoint for delegue users
-      baseUrl =
-          'http://estcommand.ddns.net:8080/api/v1/commands/zone/$userRegion';
+      baseUrl = '$apiBaseUrl/commands/zone/$userRegion';
     } else {
       // Use regular endpoint for admin/superuser/client users
-      baseUrl = 'http://estcommand.ddns.net:8080/api/v1/commands';
+      baseUrl = '$apiBaseUrl/commands';
     }
+
+    // Superuser uses same API as admin - no special pagination needed
+    // The only difference is in the UI actions available (validate/not validate only)
 
     final uri = Uri.parse(baseUrl).replace(queryParameters: queryParams);
 
@@ -1753,6 +1825,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   @override
   void initState() {
     super.initState();
+
+    // ✨ Initialize Animations
+    _initializeAnimations();
+
     initializeProductCheckboxes(); // Initialize checkboxes
     _loadWhatsAppNumber(); // Load saved WhatsApp number
 
@@ -1770,6 +1846,628 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     _checkSuser();
     _checkClient();
     _checkDelegue();
+  }
+
+  // ✨ Initialize Animation Controllers
+  void _initializeAnimations() {
+    // Staggered list animation
+    _staggeredListController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+
+    // FAB orbital menu animation
+    _fabController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+
+    // Search bar morphing animation
+    _searchBarController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+
+    // Shimmer loading animation
+    _shimmerController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    )..repeat();
+
+    // Ripple effect animation
+    _rippleController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+
+    // 🖥️ Layout transition animation for multi-column
+    _layoutTransitionController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+
+    // Initialize animation values
+    _searchBarScale = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _searchBarController, curve: Curves.easeOut),
+    );
+
+    _shimmerOffset =
+        Tween<Offset>(
+          begin: const Offset(-1.0, 0.0),
+          end: const Offset(1.0, 0.0),
+        ).animate(
+          CurvedAnimation(parent: _shimmerController, curve: Curves.linear),
+        );
+  }
+
+  // Removed unused _triggerStaggeredAnimation function
+
+  // ✨ Create staggered animation for list items
+  Widget _buildStaggeredListItem({required Widget child, required int index}) {
+    final delay = (index * 100).clamp(0, 800);
+
+    return TweenAnimationBuilder<double>(
+      duration: Duration(milliseconds: 600 + delay),
+      tween: Tween(begin: 0.0, end: 1.0),
+      curve: Curves.easeOutBack,
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(0, 50 * (1 - value)),
+          child: Opacity(opacity: value, child: child),
+        );
+      },
+      child: child,
+    );
+  }
+
+  // ✨ Create animated morphing filter chip
+  Widget _buildMorphingFilterChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onPressed,
+    required IconData icon,
+    Color? selectedColor,
+  }) {
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 300),
+      tween: Tween(begin: 0.0, end: isSelected ? 1.0 : 0.0),
+      curve: Curves.easeOutBack,
+      builder: (context, value, child) {
+        final scale = 1.0 + (0.1 * value); // Scale up when selected
+        final color = isSelected
+            ? selectedColor ??
+                  Colors
+                      .blue
+                      .shade600 // Solid color when selected
+            : Colors.grey.shade100;
+        final textColor = isSelected
+            ? Colors
+                  .white // Always white text when selected for visibility
+            : Colors.grey.shade700;
+
+        return Transform.scale(
+          scale: scale,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isSelected
+                    ? (selectedColor ?? const Color(0xFFDC2626)).withOpacity(
+                        0.8,
+                      )
+                    : Colors.grey.shade300,
+                width: isSelected ? 2 : 1,
+              ),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: (selectedColor ?? const Color(0xFFDC2626))
+                            .withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: InkWell(
+              onTap: onPressed,
+              borderRadius: BorderRadius.circular(20),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 16, color: textColor),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.w400,
+                    ),
+                  ),
+                  if (isSelected) ...[
+                    const SizedBox(width: 4),
+                    Icon(Icons.check_circle, size: 14, color: textColor),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ✨ Build animated state filter chips
+  Widget _buildAnimatedStateFilters() {
+    // 🎨 New monochrome color scheme with red accent
+    final states = [
+      {
+        'label': 'Tous',
+        'value': null,
+        'icon': Icons.all_inclusive,
+        'color': const Color(0xFF374151), // Dark grey
+      },
+      {
+        'label': 'En Attente',
+        'value': 'En Attente',
+        'icon': Icons.hourglass_empty,
+        'color': const Color(0xFF6B7280), // Medium grey
+      },
+      {
+        'label': 'Effectué',
+        'value': 'Effectué',
+        'icon': Icons.check_circle,
+        'color': const Color(0xFF1F2937), // Rich black
+      },
+      {
+        'label': 'Rejeté',
+        'value': 'Rejeté',
+        'icon': Icons.cancel,
+        'color': const Color(0xFFDC2626), // Primary red
+      },
+      {
+        'label': 'Numéro Incorrecte',
+        'value': 'Numéro Incorrecte',
+        'icon': Icons.error,
+        'color': const Color(0xFFDC2626), // Primary red
+      },
+      {
+        'label': 'Problème Solde',
+        'value': 'Problème Solde',
+        'icon': Icons.account_balance_wallet,
+        'color': const Color(0xFFDC2626), // Primary red
+      },
+    ];
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: states.asMap().entries.map((entry) {
+        final index = entry.key;
+        final state = entry.value;
+        final isSelected = selectedState == state['value'];
+
+        return _buildHoverEffect(
+          hoverKey: 'filter_chip_$index',
+          hoverScale: 1.05,
+          hoverGlowColor: state['color'] as Color,
+          child: _buildMorphingFilterChip(
+            label: state['label'] as String,
+            isSelected: isSelected,
+            icon: state['icon'] as IconData,
+            selectedColor: state['color'] as Color,
+            onPressed: () {
+              setState(() {
+                selectedState = selectedState == state['value']
+                    ? null
+                    : state['value'] as String?;
+              });
+              _applyFiltersAndRefresh();
+            },
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // Removed unused _buildOrbitalFAB function
+
+  // ✨ Create shimmer loading placeholder
+  Widget _buildShimmerCard() {
+    return AnimatedBuilder(
+      animation: _shimmerController,
+      builder: (context, child) {
+        return Container(
+          margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                spreadRadius: 0,
+                blurRadius: 12,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header shimmer
+                Row(
+                  children: [
+                    _buildShimmerBox(width: 120, height: 16),
+                    const Spacer(),
+                    _buildShimmerBox(width: 60, height: 12, isRounded: true),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Product line shimmer
+                _buildShimmerBox(width: 80, height: 14),
+                const SizedBox(height: 8),
+                // Details shimmer
+                Row(
+                  children: [
+                    _buildShimmerBox(width: 40, height: 12),
+                    const SizedBox(width: 12),
+                    _buildShimmerBox(width: 60, height: 12),
+                    const Spacer(),
+                    _buildShimmerBox(width: 50, height: 12),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Action buttons shimmer
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    _buildShimmerBox(width: 30, height: 30, isRounded: true),
+                    const SizedBox(width: 8),
+                    _buildShimmerBox(width: 30, height: 30, isRounded: true),
+                    const SizedBox(width: 8),
+                    _buildShimmerBox(width: 30, height: 30, isRounded: true),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ✨ Individual shimmer box with gradient animation
+  Widget _buildShimmerBox({
+    required double width,
+    required double height,
+    bool isRounded = false,
+  }) {
+    return AnimatedBuilder(
+      animation: _shimmerOffset,
+      builder: (context, child) {
+        return Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(isRounded ? height / 2 : 8),
+            gradient: LinearGradient(
+              colors: [
+                Colors.grey.shade300,
+                Colors.grey.shade100,
+                Colors.grey.shade300,
+              ],
+              stops: const [0.0, 0.5, 1.0],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              transform: GradientRotation(_shimmerOffset.value.dx),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Removed unused _buildShimmerLoadingList function
+
+  // 🖥️ Desktop hover effect wrapper
+  Widget _buildHoverEffect({
+    required Widget child,
+    required String hoverKey,
+    double hoverScale = 1.02,
+    double hoverElevation = 8.0,
+    Color? hoverGlowColor,
+  }) {
+    if (!isDesktop()) return child; // Only apply on desktop
+
+    return MouseRegion(
+      onEnter: (_) {
+        setState(() => _isHovered[hoverKey] = true);
+      },
+      onExit: (_) {
+        setState(() => _isHovered[hoverKey] = false);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        transform: Matrix4.identity()
+          ..scale(_isHovered[hoverKey] == true ? hoverScale : 1.0),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: _isHovered[hoverKey] == true
+                ? [
+                    BoxShadow(
+                      color:
+                          hoverGlowColor?.withOpacity(0.3) ??
+                          const Color(0xFFDC2626).withOpacity(0.2),
+                      blurRadius: hoverElevation,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : [],
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  // 🖥️ Multi-column layout calculator
+  int _calculateColumnCount(double screenWidth) {
+    if (screenWidth < 800) return 1;
+    if (screenWidth < 1200) return 2;
+    return 3;
+  }
+
+  // 🖥️ Build responsive multi-column layout
+  Widget _buildMultiColumnLayout(List<Map<String, dynamic>> orders) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final newColumnCount = _calculateColumnCount(constraints.maxWidth);
+
+        // Trigger layout transition animation if column count changes
+        if (newColumnCount != _currentColumnCount) {
+          _currentColumnCount = newColumnCount;
+          _layoutTransitionController.reset();
+          _layoutTransitionController.forward();
+        }
+
+        return AnimatedBuilder(
+          animation: _layoutTransitionController,
+          builder: (context, child) {
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeInOut,
+              child: _buildColumnContent(orders, newColumnCount),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // 🖥️ Build column content based on count
+  Widget _buildColumnContent(
+    List<Map<String, dynamic>> orders,
+    int columnCount,
+  ) {
+    if (columnCount == 1) {
+      // Single column - use existing list
+      return ListView.separated(
+        padding: const EdgeInsets.all(8),
+        itemCount: orders.length,
+        separatorBuilder: (context, index) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          return _buildStaggeredListItem(
+            index: index,
+            child: _buildHoverEffect(
+              hoverKey: 'card_$index',
+              child: _buildEnhancedMobileCard(
+                orders[index],
+                index,
+                (10000 - ((orders[index]['prixPercent'] ?? 0) / 100 * 10000))
+                    .toDouble(),
+                key: ValueKey('order_${orders[index]['id']}_$index'),
+              ),
+            ),
+          );
+        },
+      );
+    } else {
+      // Multi-column grid
+      return GridView.builder(
+        padding: const EdgeInsets.all(8),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columnCount,
+          childAspectRatio: 1.5,
+          crossAxisSpacing: 12.0,
+          mainAxisSpacing: 12.0,
+        ),
+        itemCount: orders.length,
+        itemBuilder: (context, index) {
+          return _buildStaggeredListItem(
+            index: index,
+            child: _buildHoverEffect(
+              hoverKey: 'grid_card_$index',
+              hoverScale: 1.03,
+              child: _buildCompactCard(orders[index], index),
+            ),
+          );
+        },
+      );
+    }
+  }
+
+  // 🖥️ Build compact card for grid layout
+  Widget _buildCompactCard(Map<String, dynamic> order, int index) {
+    final price = 10000 - ((order['prixPercent'] ?? 0) / 100 * 10000);
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              order['client'] ?? 'Client Inconnu',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              order['product'] ?? '',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const Spacer(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '${price.toStringAsFixed(0)} DA',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _stateColor(order['state']),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    order['state'] ?? '',
+                    style: const TextStyle(color: Colors.white, fontSize: 10),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ✨ Build morphing search bar with animations
+  Widget _buildMorphingSearchBar() {
+    return AnimatedBuilder(
+      animation: _searchBarController,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _searchBarScale.value,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(_isSearchFocused ? 16 : 8),
+              boxShadow: _isSearchFocused
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFFDC2626).withOpacity(0.2),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : [],
+            ),
+            child: TextField(
+              controller: searchController,
+              onTap: () {
+                setState(() => _isSearchFocused = true);
+                _searchBarController.forward();
+              },
+              onSubmitted: (value) {
+                setState(() => _isSearchFocused = false);
+                _searchBarController.reverse();
+              },
+              onEditingComplete: () {
+                setState(() => _isSearchFocused = false);
+                _searchBarController.reverse();
+              },
+              decoration: InputDecoration(
+                labelText: _isSearchFocused
+                    ? 'Tapez pour rechercher...'
+                    : 'Rechercher par client',
+                labelStyle: TextStyle(
+                  color: _isSearchFocused
+                      ? const Color(0xFFDC2626)
+                      : const Color(0xFF6B7280),
+                ),
+                prefixIcon: AnimatedRotation(
+                  turns: _isSearchFocused ? 0.25 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: Icon(
+                    _isSearchFocused ? Icons.manage_search : Icons.search,
+                    size: _isSearchFocused ? 24 : 18,
+                    color: _isSearchFocused
+                        ? const Color(0xFFDC2626)
+                        : const Color(0xFF6B7280),
+                  ),
+                ),
+                suffixIcon: _isSearchFocused
+                    ? AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.clear,
+                            color: const Color(0xFF6B7280),
+                          ),
+                          onPressed: () {
+                            searchController.clear();
+                            setState(() => _isSearchFocused = false);
+                            _searchBarController.reverse();
+                            _onSearchChanged('');
+                          },
+                        ),
+                      )
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(
+                    _isSearchFocused ? 16 : 8,
+                  ),
+                  borderSide: BorderSide(
+                    color: _isSearchFocused
+                        ? const Color(0xFFDC2626).withOpacity(0.5)
+                        : const Color(0xFFE5E7EB),
+                    width: _isSearchFocused ? 2 : 1,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(
+                    color: const Color(0xFFDC2626),
+                    width: 2,
+                  ),
+                ),
+                filled: true,
+                fillColor: _isSearchFocused
+                    ? const Color(0xFFFEF2F2) // Light red tint
+                    : const Color(0xFFF9FAFB), // Light grey
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: _isSearchFocused ? 16 : 12,
+                  vertical: _isSearchFocused ? 12 : 8,
+                ),
+              ),
+              onChanged: _onSearchChanged,
+            ),
+          ),
+        );
+      },
+    );
   }
 
   // NEW: Cache-first initialization strategy
@@ -1895,12 +2593,39 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
   @override
   void dispose() {
+    // ✨ Dispose Animation Controllers
+    _staggeredListController.dispose();
+    _fabController.dispose();
+    _searchBarController.dispose();
+    _shimmerController.dispose();
+    _rippleController.dispose();
+    _layoutTransitionController.dispose();
+
+    // Dispose all card controllers
+    for (var controller in _cardControllers) {
+      controller.dispose();
+    }
+
+    // Dispose all ripple controllers
+    for (var controller in _rippleControllers.values) {
+      controller.dispose();
+    }
+
     _refreshTimer?.cancel();
     _searchTimer?.cancel();
     _cacheRefreshTimer?.cancel(); // Cancel cache refresh timer
     _connectionCheckTimer?.cancel(); // Cancel connection check timer
     _disconnectWebSocket(); // Disconnect WebSocket
+    _clearUserCache(); // Clear user cache
     super.dispose();
+  }
+
+  // Clear user cache when user changes
+  void _clearUserCache() {
+    _cachedIsDelegue = null;
+    _cachedUserRegion = null;
+    _cachedIsSuper = null;
+    _userInfoCacheTime = null;
   }
 
   // Load WhatsApp number from SharedPreferences
@@ -1936,34 +2661,62 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       final token = prefs.getString('auth_token') ?? '';
 
       if (token.isEmpty) {
+        print('DEBUG: Connection Check - No Auth Token');
         _updateConnectionStatus(false, 'No Auth Token');
         return;
       }
 
-      // Use the same server configuration as other API calls
-      final useLocalServer = prefs.getBool('use_local_server') ?? false;
-      final serverHost = useLocalServer
-          ? '192.168.200.34'
-          : 'estcommand.ddns.net';
+      // Use NetworkService to get the best available server
+      final networkService = NetworkService();
+      final serverConfig = await networkService.getBestAvailableServer();
+
+      if (!serverConfig.isAvailable) {
+        print('DEBUG: Connection Check - No server available');
+        _updateConnectionStatus(false, 'No server available');
+        return;
+      }
+
+      final testUrl = '${serverConfig.apiBaseUrl}/commands?take=1';
+      print('DEBUG: Connection Check - Testing URL: $testUrl');
+      print(
+        'DEBUG: Connection Check - Using server: ${serverConfig.displayName}',
+      );
 
       final response = await http
           .get(
-            Uri.parse('http://$serverHost:8080/api/v1/commands?take=1'),
+            Uri.parse(testUrl),
             headers: {
               'Authorization': 'Bearer $token',
               'Content-Type': 'application/json',
             },
           )
-          .timeout(Duration(seconds: 5));
+          .timeout(Duration(seconds: 10));
+
+      print(
+        'DEBUG: Connection Check - Response Status: ${response.statusCode}',
+      );
+      print('DEBUG: Connection Check - Response Body: ${response.body}');
 
       if (response.statusCode == 200) {
-        _updateConnectionStatus(true, 'Connected');
+        print(
+          'DEBUG: Connection Check - SUCCESS: Connected to ${serverConfig.displayName}',
+        );
+        _updateConnectionStatus(
+          true,
+          'Connected to ${serverConfig.type == ServerType.local ? "Local" : "Online"} Server',
+        );
       } else if (response.statusCode == 401) {
+        print('DEBUG: Connection Check - FAILED: Auth Failed');
         _updateConnectionStatus(false, 'Auth Failed');
       } else {
+        print(
+          'DEBUG: Connection Check - FAILED: Server Error ${response.statusCode}',
+        );
+        print('DEBUG: Connection Check - Error Response: ${response.body}');
         _updateConnectionStatus(false, 'Server Error ${response.statusCode}');
       }
     } catch (e) {
+      print('DEBUG: Connection Check - EXCEPTION: $e');
       _updateConnectionStatus(false, 'Connection Failed');
     }
   }
@@ -2079,11 +2832,16 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     if (_userInfoCacheTime != null &&
         now.difference(_userInfoCacheTime!).inMinutes < 5 &&
         _cachedIsDelegue != null) {
-      return {'isDelegue': _cachedIsDelegue!, 'region': _cachedUserRegion};
+      return {
+        'isDelegue': _cachedIsDelegue!,
+        'region': _cachedUserRegion,
+        'isSuper': _cachedIsSuper ?? false,
+      };
     }
 
     // Fetch fresh user info
     final userIsDelegue = await isDelegue() ?? false;
+    final userIsSuper = await isSuper() ?? false;
     String? region;
 
     if (userIsDelegue) {
@@ -2093,9 +2851,14 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     // Cache the results
     _cachedIsDelegue = userIsDelegue;
     _cachedUserRegion = region;
+    _cachedIsSuper = userIsSuper;
     _userInfoCacheTime = now;
 
-    return {'isDelegue': userIsDelegue, 'region': region};
+    return {
+      'isDelegue': userIsDelegue,
+      'region': region,
+      'isSuper': userIsSuper,
+    };
   }
 
   // Apply filters and refresh data
@@ -2366,12 +3129,14 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     final userIsDelegue = userInfo['isDelegue'] as bool;
     final userRegion = userInfo['region'] as String?;
 
+    // Use NetworkService to get the current server's API base URL
+    final apiBaseUrl = await _getApiBaseUrl();
+
     final String baseUrl;
     if (userIsDelegue && userRegion != null) {
-      baseUrl =
-          'http://estcommand.ddns.net:8080/api/v1/commands/zone/$userRegion';
+      baseUrl = '$apiBaseUrl/commands/zone/$userRegion';
     } else {
-      baseUrl = 'http://estcommand.ddns.net:8080/api/v1/commands';
+      baseUrl = '$apiBaseUrl/commands';
     }
 
     final uri = Uri.parse(baseUrl).replace(queryParameters: queryParams);
@@ -2499,7 +3264,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Export failed: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: const Color(0xFFDC2626), // Primary red for errors
         ),
       );
     }
@@ -2600,7 +3365,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('✅ ${data.length} orders exported to: $path'),
-        backgroundColor: Colors.green,
+        backgroundColor: const Color(0xFF1F2937), // Dark grey for success
         action: SnackBarAction(
           label: 'Open',
           onPressed: () => OpenFile.open(path),
@@ -2619,7 +3384,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Error: Cannot delete order - invalid order ID'),
-            backgroundColor: Colors.red,
+            backgroundColor: const Color(0xFFDC2626), // Primary red for errors
           ),
         );
       }
@@ -2663,7 +3428,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Order deleted successfully'),
-              backgroundColor: Colors.green,
+              backgroundColor: const Color(0xFF1F2937), // Dark grey for success
             ),
           );
         }
@@ -2722,7 +3487,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Error: Cannot update order - invalid order ID'),
-            backgroundColor: Colors.red,
+            backgroundColor: const Color(0xFFDC2626), // Primary red for errors
           ),
         );
       }
@@ -2784,7 +3549,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Order updated to: $newState'),
-              backgroundColor: Colors.green,
+              backgroundColor: const Color(0xFF1F2937), // Dark grey for success
               duration: const Duration(seconds: 2),
             ),
           );
@@ -2800,7 +3565,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Failed to update state: ${response.statusCode}'),
-              backgroundColor: Colors.red,
+              backgroundColor: const Color(
+                0xFFDC2626,
+              ), // Primary red for errors
             ),
           );
         }
@@ -2811,7 +3578,138 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Network error: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: const Color(0xFFDC2626), // Primary red for errors
+          ),
+        );
+      }
+    }
+  }
+
+  // New function for superuser to change accepted status
+  void _changeOrderAccepted(int index, bool accepted) async {
+    final orderId = _currentPageOrders[index]['id'];
+
+    // Safety check for null orderId
+    if (orderId == null) {
+      print('ERROR: Order ID is null! Cannot change accepted status.');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error: Cannot update order - invalid order ID'),
+            backgroundColor: const Color(0xFFDC2626), // Primary red for errors
+          ),
+        );
+      }
+      return;
+    }
+
+    print('=== CHANGING ORDER ACCEPTED STATUS ===');
+    print('Order ID: $orderId');
+    print('New Accepted Status: $accepted');
+    print('Order Index: $index');
+
+    // Show immediate visual feedback
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${accepted ? 'Validating' : 'Not validating'} order...'),
+        backgroundColor: accepted
+            ? const Color(0xFF1F2937)
+            : const Color(0xFFDC2626),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+
+      if (token.isEmpty) {
+        print('ERROR: No auth token available');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Error: Not authenticated'),
+              backgroundColor: const Color(
+                0xFFDC2626,
+              ), // Primary red for errors
+            ),
+          );
+        }
+        return;
+      }
+
+      print('=== ACCEPTED STATUS CHANGE DEBUG ===');
+      print('Order ID: $orderId');
+      print('New Accepted Status: $accepted');
+      print(
+        'API Endpoint: http://estcommand.ddns.net:8080/api/v1/commands/$orderId',
+      );
+      print('====================================');
+
+      final response = await http.put(
+        Uri.parse('http://estcommand.ddns.net:8080/api/v1/commands/$orderId'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'accepted': accepted}),
+      );
+
+      print('=== ACCEPTED STATUS CHANGE RESPONSE ===');
+      print('Status Code: ${response.statusCode}');
+      print('Response Body: ${response.body}');
+      print('=======================================');
+
+      if (response.statusCode == 200) {
+        // ✅ Success: Refresh from database to get current state with filters preserved
+        await fetchPurchaseOrders(
+          page: _currentPage,
+          pageSize: _rowsPerPage,
+          keepPage: true,
+          stateFilter: selectedState,
+          productFilters: productCheckboxes.entries
+              .where((entry) => entry.value)
+              .map((entry) => entry.key)
+              .toList(),
+          dateRange: selectedDateRange,
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Order ${accepted ? 'validated' : 'not validated'} successfully',
+              ),
+              backgroundColor: const Color(0xFF1F2937), // Dark grey for success
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+
+        // Broadcast accepted status change to other users via WebSocket
+        _sendWebSocketMessage('ORDER_UPDATED', {
+          'id': orderId,
+          'accepted': accepted,
+        });
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to update order: ${response.statusCode}'),
+              backgroundColor: const Color(
+                0xFFDC2626,
+              ), // Primary red for errors
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('ERROR: Failed to update order accepted status: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Network error: $e'),
+            backgroundColor: const Color(0xFFDC2626), // Primary red for errors
           ),
         );
       }
@@ -2822,17 +3720,17 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   Color _getSnackBarColor(String state) {
     switch (state.toLowerCase()) {
       case 'effectué':
-        return Colors.green;
+        return const Color(0xFF1F2937); // Dark grey for success
       case 'rejeté':
-        return Colors.red;
+        return const Color(0xFFDC2626); // Primary red for rejection
       case 'en attente':
-        return Colors.orange;
+        return const Color(0xFF6B7280); // Medium grey for pending
       case 'numéro incorrecte':
-        return Colors.purple;
+        return const Color(0xFFDC2626); // Primary red for errors
       case 'problème solde':
-        return Colors.amber;
+        return const Color(0xFFDC2626); // Primary red for problems
       default:
-        return Colors.blue;
+        return const Color(0xFF374151); // Dark grey default
     }
   }
 
@@ -2850,7 +3748,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(accepted ? 'Order accepted!' : 'Order rejected!'),
-        backgroundColor: accepted ? Colors.green : Colors.orange,
+        backgroundColor: accepted
+            ? const Color(0xFF1F2937)
+            : const Color(0xFFDC2626),
         duration: const Duration(seconds: 1),
       ),
     );
@@ -2882,7 +3782,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to update order: ${response.statusCode}'),
-            backgroundColor: Colors.red,
+            backgroundColor: const Color(0xFFDC2626), // Primary red for errors
           ),
         );
       }
@@ -2896,7 +3796,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Network error: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: const Color(0xFFDC2626), // Primary red for errors
         ),
       );
     }
@@ -3047,7 +3947,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                         gradient: LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
-                          colors: [Colors.blue.shade600, Colors.blue.shade700],
+                          colors: [
+                            const Color(0xFFDC2626),
+                            const Color(0xFFB91C1C),
+                          ],
                         ),
                         borderRadius: BorderRadius.only(
                           topLeft: Radius.circular(16),
@@ -3120,7 +4023,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                         Container(
                                           padding: EdgeInsets.all(12),
                                           decoration: BoxDecoration(
-                                            color: Colors.green.shade50,
+                                            color: const Color(
+                                              0xFFF3F4F6,
+                                            ), // Light grey
                                             borderRadius: BorderRadius.circular(
                                               8,
                                             ),
@@ -3132,7 +4037,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                             children: [
                                               Icon(
                                                 Icons.person,
-                                                color: Colors.green.shade600,
+                                                color: const Color(
+                                                  0xFF1F2937,
+                                                ), // Dark grey for success
                                                 size: 20,
                                               ),
                                               SizedBox(width: 12),
@@ -3178,7 +4085,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                               IconButton(
                                                 icon: Icon(
                                                   Icons.edit,
-                                                  color: Colors.green.shade600,
+                                                  color: const Color(
+                                                    0xFF1F2937,
+                                                  ), // Dark grey for success
                                                   size: 18,
                                                 ),
                                                 onPressed: () {
@@ -3378,7 +4287,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                                 IconButton(
                                                   icon: Icon(
                                                     Icons.close,
-                                                    color: Colors.red.shade600,
+                                                    color: const Color(
+                                                      0xFFDC2626,
+                                                    ),
                                                     size: 20,
                                                   ),
                                                   style: IconButton.styleFrom(
@@ -3501,7 +4412,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                                 content: Text(
                                                   "Please select a client",
                                                 ),
-                                                backgroundColor: Colors.red,
+                                                backgroundColor: const Color(
+                                                  0xFFDC2626,
+                                                ), // Primary red for errors
                                               ),
                                             );
                                             return;
@@ -3554,27 +4467,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                               '===============================',
                                             );
 
-                                            // OPTIMISTIC UPDATE: Add order to cache instantly before API call
-                                            final optimisticOrder = {
-                                              'id': DateTime.now()
-                                                  .millisecondsSinceEpoch, // Temporary ID
-                                              'client': selectedClientName,
-                                              'product':
-                                                  product, // product is the product name string
-                                              'number': numberController.text,
-                                              'quantity': quantity,
-                                              'state':
-                                                  'En Attente', // Default state
-                                              'name':
-                                                  '', // Will be filled by server
-                                              'accepted':
-                                                  true, // Boolean, not string
-                                              'acceptedBy': ' ',
-                                              'date': DateTime.now()
-                                                  .toIso8601String(),
-                                              'prixPercent': unitPrice
-                                                  .toDouble(), // Ensure it's a number
-                                            };
+                                            // Note: Direct API call without optimistic update for performance
 
                                             print(
                                               'DEBUG: Creating order via API...',
@@ -3628,9 +4521,6 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                                 );
                                                 if (responseData['data'] !=
                                                     null) {
-                                                  final realOrder =
-                                                      responseData['data'];
-
                                                   // Refresh from database to show new order with filters preserved
                                                   await fetchPurchaseOrders(
                                                     page: _currentPage,
@@ -3692,7 +4582,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                                 content: Text(
                                                   "${selectedProducts.length} Orders created successfully",
                                                 ),
-                                                backgroundColor: Colors.green,
+                                                backgroundColor: const Color(
+                                                  0xFF1F2937,
+                                                ), // Dark grey for success
                                               ),
                                             );
                                             Navigator.pop(context);
@@ -3767,7 +4659,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                               content: Text(
                                                 'Error creating order: $e',
                                               ),
-                                              backgroundColor: Colors.red,
+                                              backgroundColor: const Color(
+                                                0xFFDC2626,
+                                              ), // Primary red for errors
                                             ),
                                           );
                                         }
@@ -3783,7 +4677,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                 ),
                               ),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue.shade600,
+                                backgroundColor: const Color(0xFFDC2626),
                                 foregroundColor: Colors.white,
                                 padding: EdgeInsets.symmetric(vertical: 16),
                                 shape: RoundedRectangleBorder(
@@ -3820,7 +4714,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Error: Cannot update order - invalid order ID'),
-            backgroundColor: Colors.red,
+            backgroundColor: const Color(0xFFDC2626), // Primary red for errors
           ),
         );
       }
@@ -3901,7 +4795,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Order updated successfully'),
-            backgroundColor: Colors.green,
+            backgroundColor: const Color(0xFF1F2937), // Dark grey for success
             duration: Duration(seconds: 2),
           ),
         );
@@ -3917,7 +4811,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to update order: ${response.statusCode}'),
-            backgroundColor: Colors.red,
+            backgroundColor: const Color(0xFFDC2626), // Primary red for errors
           ),
         );
       }
@@ -4167,6 +5061,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
 
   void _checkAdmin() async {
     isAdminn = await isAdmin();
+    isSuserr = await isSuper();
     setState(() {});
   }
 
@@ -4193,7 +5088,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            Icon(Icons.settings, color: Colors.blue.shade600),
+            Icon(Icons.settings, color: const Color(0xFFDC2626)),
             const SizedBox(width: 8),
             const Text('Configuration WhatsApp'),
           ],
@@ -4229,7 +5124,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                     children: [
                       Icon(
                         Icons.info_outline,
-                        color: Colors.blue.shade600,
+                        color: const Color(0xFFDC2626),
                         size: 20,
                       ),
                       const SizedBox(width: 8),
@@ -4301,7 +5196,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
             icon: const Icon(Icons.save),
             label: const Text('Sauvegarder'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue.shade600,
+              backgroundColor: const Color(0xFFDC2626),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
@@ -4450,6 +5345,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   // Cache for user info to avoid repeated API calls
   bool? _cachedIsDelegue;
   String? _cachedUserRegion;
+  bool? _cachedIsSuper;
   DateTime? _userInfoCacheTime;
 
   List<Map<String, dynamic>> get paginatedOrders {
@@ -4715,7 +5611,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.red.shade600,
+                color: const Color(0xFFDC2626),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
@@ -4859,12 +5755,13 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: const Color(0xFFDC2626), // Primary red
         elevation: 0,
+        foregroundColor: Colors.white,
         leading: Builder(
           builder: (BuildContext context) {
             return IconButton(
-              icon: Icon(Icons.menu, color: Colors.red.shade700),
+              icon: const Icon(Icons.menu, color: Colors.white),
               onPressed: () {
                 Scaffold.of(context).openDrawer();
               },
@@ -4914,7 +5811,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                     'Commandes EST STAR',
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w600,
-                      color: Colors.red.shade700,
+                      color: Colors.black,
                     ),
                   ),
                   if (_isRefreshingInBackground) ...[
@@ -4986,13 +5883,13 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
             Container(
               margin: const EdgeInsets.only(right: 8),
               decoration: BoxDecoration(
-                color: Colors.green.shade50,
+                color: const Color(0xFFF3F4F6), // Light grey
                 borderRadius: BorderRadius.circular(8),
               ),
               child: IconButton(
                 icon: Icon(
                   FontAwesomeIcons.whatsapp,
-                  color: Colors.green.shade600,
+                  color: const Color(0xFF1F2937), // Dark grey for success
                   size: 20,
                 ),
                 tooltip: 'Configuration WhatsApp: $_whatsappNumber',
@@ -5002,7 +5899,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
           Container(
             margin: const EdgeInsets.only(right: 16),
             decoration: BoxDecoration(
-              color: Colors.red.shade50,
+              color: const Color(0xFFFEF2F2), // Light red tint
               borderRadius: BorderRadius.circular(8),
             ),
             child: IconButton(
@@ -5029,9 +5926,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFFFFEBEE), // Very light red/pink
-              Color(0xFFFFCDD2), // Light red/pink
-              Color(0xFFEF9A9A), // Soft red
+              Color(0xFFF9FAFB), // Light grey
+              Color(0xFFE5E7EB), // Medium grey
+              Color(0xFFD1D5DB), // Darker grey
             ],
           ),
         ),
@@ -5054,28 +5951,10 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
+                              // ✨ Animated Morphing Search Bar
                               Expanded(
                                 flex: 2,
-                                child: TextField(
-                                  controller: searchController,
-                                  decoration: InputDecoration(
-                                    labelText: 'Rechercher par client',
-                                    prefixIcon: const Icon(
-                                      Icons.search,
-                                      size: 18,
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    filled: true,
-                                    fillColor: Colors.grey.shade50,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                  ),
-                                  onChanged: _onSearchChanged,
-                                ),
+                                child: _buildMorphingSearchBar(),
                               ),
                               const SizedBox(width: 12),
                               // Modern Product Filter
@@ -5087,60 +5966,43 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              // Modern State Filter
+                              // ✨ Animated State Filter Chips
                               Expanded(
-                                flex: 2,
-                                child: _buildModernFilterCard(
-                                  icon: Icons.assignment_turned_in,
-                                  child: DropdownButton<String>(
-                                    value: selectedState,
-                                    hint: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.filter_list,
-                                          size: 16,
-                                          color: Colors.grey[600],
-                                        ),
-                                        SizedBox(width: 8),
-                                        Text(
-                                          "Filtrer par État",
-                                          style: TextStyle(
+                                flex: 3,
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: Colors.grey.shade200,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.filter_list,
+                                            size: 16,
                                             color: Colors.grey[600],
                                           ),
-                                        ),
-                                      ],
-                                    ),
-                                    underline: Container(),
-                                    isExpanded: true,
-                                    icon: Icon(
-                                      Icons.keyboard_arrow_down,
-                                      color: Colors.grey[600],
-                                    ),
-                                    items:
-                                        [
-                                              'En Attente',
-                                              'Effectué',
-                                              'Rejeté',
-                                              'Numéro Incorrecte',
-                                              'Problème Solde',
-                                            ]
-                                            .map(
-                                              (state) => DropdownMenuItem(
-                                                value: state,
-                                                child: Row(
-                                                  children: [
-                                                    _getStateIcon(state),
-                                                    SizedBox(width: 8),
-                                                    Text(state),
-                                                  ],
-                                                ),
-                                              ),
-                                            )
-                                            .toList(),
-                                    onChanged: (value) {
-                                      setState(() => selectedState = value);
-                                      _applyFiltersAndRefresh();
-                                    },
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            "Filtrer par État",
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[600],
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      _buildAnimatedStateFilters(),
+                                    ],
                                   ),
                                 ),
                               ),
@@ -5153,32 +6015,39 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                             runSpacing: 6,
                             alignment: WrapAlignment.center,
                             children: [
-                              ElevatedButton.icon(
-                                onPressed: () async {
-                                  final picked = await showDateRangePicker(
-                                    context: context,
-                                    firstDate: DateTime(2020),
-                                    lastDate: DateTime(2100),
-                                  );
-                                  if (picked != null) {
-                                    setState(() => selectedDateRange = picked);
-                                    _applyFiltersAndRefresh();
-                                  }
-                                },
-                                icon: const Icon(Icons.date_range, size: 14),
-                                label: const Text(
-                                  'Date',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue.shade600,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
+                              _buildHoverEffect(
+                                hoverKey: 'date_button',
+                                hoverScale: 1.05,
+                                hoverGlowColor: Colors.blue,
+                                child: ElevatedButton.icon(
+                                  onPressed: () async {
+                                    final picked = await showDateRangePicker(
+                                      context: context,
+                                      firstDate: DateTime(2020),
+                                      lastDate: DateTime(2100),
+                                    );
+                                    if (picked != null) {
+                                      setState(
+                                        () => selectedDateRange = picked,
+                                      );
+                                      _applyFiltersAndRefresh();
+                                    }
+                                  },
+                                  icon: const Icon(Icons.date_range, size: 14),
+                                  label: const Text(
+                                    'Date',
+                                    style: TextStyle(fontSize: 12),
                                   ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(6),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFDC2626),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -5389,7 +6258,9 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                         ),
                                         label: const Text('Date'),
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.blue.shade600,
+                                          backgroundColor: const Color(
+                                            0xFFDC2626,
+                                          ),
                                           foregroundColor: Colors.white,
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 12,
@@ -5536,40 +6407,48 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                 ),
                               ],
                             ),
-                            child: ListView.separated(
-                              key: PageStorageKey(
-                                'orders_list_${_currentPage}',
-                              ),
-                              padding: const EdgeInsets.all(8),
-                              itemCount: paginatedOrders.length,
-                              cacheExtent:
-                                  1000, // Cache more items for smoother scrolling
-                              separatorBuilder: (context, index) =>
-                                  const SizedBox(
-                                    height: 8,
-                                    child: Divider(
-                                      thickness: 0.5,
-                                      color: Colors.grey,
-                                      indent: 20,
-                                      endIndent: 20,
+                            child: isDesktop()
+                                ? _buildMultiColumnLayout(paginatedOrders)
+                                : ListView.separated(
+                                    key: PageStorageKey(
+                                      'orders_list_${_currentPage}',
                                     ),
-                                  ),
-                              itemBuilder: (context, index) {
-                                final order = paginatedOrders[index];
-                                final price =
-                                    10000 -
-                                    ((order['prixPercent'] ?? 0) / 100 * 10000);
+                                    padding: const EdgeInsets.all(8),
+                                    itemCount: paginatedOrders.length,
+                                    cacheExtent:
+                                        1000, // Cache more items for smoother scrolling
+                                    separatorBuilder: (context, index) =>
+                                        const SizedBox(
+                                          height: 8,
+                                          child: Divider(
+                                            thickness: 0.5,
+                                            color: Colors.grey,
+                                            indent: 20,
+                                            endIndent: 20,
+                                          ),
+                                        ),
+                                    itemBuilder: (context, index) {
+                                      final order = paginatedOrders[index];
+                                      final price =
+                                          10000 -
+                                          ((order['prixPercent'] ?? 0) /
+                                              100 *
+                                              10000);
 
-                                return _buildEnhancedMobileCard(
-                                  order,
-                                  index,
-                                  price.toDouble(),
-                                  key: ValueKey(
-                                    'order_${order['id']}_${_currentPage}',
+                                      // ✨ Wrap with staggered animation
+                                      return _buildStaggeredListItem(
+                                        index: index,
+                                        child: _buildEnhancedMobileCard(
+                                          order,
+                                          index,
+                                          price.toDouble(),
+                                          key: ValueKey(
+                                            'order_${order['id']}_${_currentPage}',
+                                          ),
+                                        ),
+                                      );
+                                    },
                                   ),
-                                );
-                              },
-                            ),
                           ),
                         ),
                         _buildPaginationControls(),
@@ -5611,8 +6490,8 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                   _buildSortableColumn('Crée Par', 'name'),
                                   _buildSortableColumn('Etat Val', 'accepted'),
                                   _buildSortableColumn('Date', 'date'),
-                                  if (isAdminn || isSuserr)
-                                    const DataColumn(label: Text('Actions')),
+                                  // Always include Actions column to match cells
+                                  const DataColumn(label: Text('Actions')),
                                 ],
                                 rows: paginatedOrders.asMap().entries.map((
                                   entry,
@@ -5724,144 +6603,148 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                                           ),
                                         ),
                                       ),
-                                      if (isAdminn)
-                                        DataCell(
-                                          SingleChildScrollView(
-                                            scrollDirection: Axis.horizontal,
-                                            child: Row(
-                                              children: [
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.check,
-                                                    color: Colors.green,
-                                                  ),
-                                                  onPressed: () =>
-                                                      _changeOrderState(
-                                                        realIndex,
-                                                        'Effectué',
-                                                      ),
-                                                ),
-                                                const SizedBox(width: 6),
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.close,
-                                                    color: Colors.red,
-                                                  ),
-                                                  onPressed: () =>
-                                                      _changeOrderState(
-                                                        realIndex,
-                                                        'Rejeté',
-                                                      ),
-                                                ),
-                                                const SizedBox(width: 6),
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.phone_disabled,
-                                                    color: Colors.red,
-                                                  ),
-                                                  onPressed: () =>
-                                                      _changeOrderState(
-                                                        realIndex,
-                                                        'Numéro Incorrecte',
-                                                      ),
-                                                ),
-                                                const SizedBox(width: 6),
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.money_off_csred,
-                                                    color: Colors.red,
-                                                  ),
-                                                  onPressed: () =>
-                                                      _changeOrderState(
-                                                        realIndex,
-                                                        'Problème Solde',
-                                                      ),
-                                                ),
-                                                const SizedBox(width: 6),
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.hourglass_bottom,
-                                                    color: Colors.orange,
-                                                  ),
-                                                  onPressed: () =>
-                                                      _changeOrderState(
-                                                        realIndex,
-                                                        'En Attente',
-                                                      ),
-                                                ),
-                                                const SizedBox(width: 6),
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.edit,
-                                                    color: Colors.blue,
-                                                  ),
-                                                  onPressed: () =>
-                                                      _showEditDialog(
-                                                        realIndex,
-                                                      ),
-                                                ),
-                                                if (order['product'] ==
-                                                    'STORM STI')
-                                                  IconButton(
-                                                    icon: const Icon(
-                                                      FontAwesomeIcons.whatsapp,
-                                                      color: Colors.green,
-                                                    ),
-                                                    onPressed: () =>
-                                                        _sendOrderToWhatsApp(
-                                                          order,
+                                      // Always include Actions cell to match columns
+                                      DataCell(
+                                        (isAdminn || isSuserr)
+                                            ? SingleChildScrollView(
+                                                scrollDirection:
+                                                    Axis.horizontal,
+                                                child: Row(
+                                                  children: [
+                                                    // Admin: Accept Order State (Etat C)
+                                                    if (isAdminn) ...[
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                          Icons.check,
+                                                          color: Colors.green,
                                                         ),
-                                                  ),
-                                                const SizedBox(width: 6),
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons.delete,
-                                                    color: Colors.black,
-                                                  ),
-                                                  onPressed: () =>
-                                                      _confirmDeleteOrder(
-                                                        realIndex,
+                                                        onPressed: () =>
+                                                            _changeOrderState(
+                                                              realIndex,
+                                                              'Effectué',
+                                                            ),
                                                       ),
+                                                      const SizedBox(width: 6),
+                                                      // Reject Order State (Etat C)
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                          Icons.close,
+                                                          color: Colors.red,
+                                                        ),
+                                                        onPressed: () =>
+                                                            _changeOrderState(
+                                                              realIndex,
+                                                              'Rejeté',
+                                                            ),
+                                                      ),
+                                                    ],
+                                                    // Superuser: Validate Order (Etat Val)
+                                                    if (isSuserr) ...[
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                          Icons.verified,
+                                                          color: Colors.blue,
+                                                        ),
+                                                        onPressed: () =>
+                                                            _changeOrderAccepted(
+                                                              realIndex,
+                                                              true,
+                                                            ),
+                                                      ),
+                                                      const SizedBox(width: 6),
+                                                      // Invalidate Order (Etat Val)
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                          Icons.block,
+                                                          color: Colors.orange,
+                                                        ),
+                                                        onPressed: () =>
+                                                            _changeOrderAccepted(
+                                                              realIndex,
+                                                              false,
+                                                            ),
+                                                      ),
+                                                    ],
+                                                    // Additional admin-only buttons
+                                                    if (isAdminn) ...[
+                                                      const SizedBox(width: 6),
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                          Icons.phone_disabled,
+                                                          color: Colors.red,
+                                                        ),
+                                                        onPressed: () =>
+                                                            _changeOrderState(
+                                                              realIndex,
+                                                              'Numéro Incorrecte',
+                                                            ),
+                                                      ),
+                                                      const SizedBox(width: 6),
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                          Icons.money_off_csred,
+                                                          color: Colors.red,
+                                                        ),
+                                                        onPressed: () =>
+                                                            _changeOrderState(
+                                                              realIndex,
+                                                              'Problème Solde',
+                                                            ),
+                                                      ),
+                                                      const SizedBox(width: 6),
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                          Icons
+                                                              .hourglass_bottom,
+                                                          color: Colors.orange,
+                                                        ),
+                                                        onPressed: () =>
+                                                            _changeOrderState(
+                                                              realIndex,
+                                                              'En Attente',
+                                                            ),
+                                                      ),
+                                                      const SizedBox(width: 6),
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                          Icons.edit,
+                                                          color: Colors.blue,
+                                                        ),
+                                                        onPressed: () =>
+                                                            _showEditDialog(
+                                                              realIndex,
+                                                            ),
+                                                      ),
+                                                      if (order['product'] ==
+                                                          'STORM STI')
+                                                        IconButton(
+                                                          icon: const Icon(
+                                                            FontAwesomeIcons
+                                                                .whatsapp,
+                                                            color: Colors.green,
+                                                          ),
+                                                          onPressed: () =>
+                                                              _sendOrderToWhatsApp(
+                                                                order,
+                                                              ),
+                                                        ),
+                                                      const SizedBox(width: 6),
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                          Icons.delete,
+                                                          color: Colors.black,
+                                                        ),
+                                                        onPressed: () =>
+                                                            _confirmDeleteOrder(
+                                                              realIndex,
+                                                            ),
+                                                      ),
+                                                    ],
+                                                  ],
                                                 ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      if (isSuserr)
-                                        DataCell(
-                                          Row(
-                                            children: [
-                                              IconButton(
-                                                icon: const Icon(
-                                                  Icons.check,
-                                                  color: Colors.green,
-                                                ),
-                                                onPressed: () => handleAccept(
-                                                  true,
-                                                  realIndex,
-                                                ),
-                                              ),
-                                              IconButton(
-                                                icon: const Icon(
-                                                  Icons.close,
-                                                  color: Colors.red,
-                                                ),
-                                                onPressed: () => handleAccept(
-                                                  false,
-                                                  realIndex,
-                                                ),
-                                              ),
-                                              IconButton(
-                                                icon: const Icon(
-                                                  Icons.edit,
-                                                  color: Colors.blue,
-                                                ),
-                                                onPressed: () =>
-                                                    _showEditDialog(realIndex),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
+                                              )
+                                            : const SizedBox.shrink(), // Empty widget for non-admin users
+                                      ),
                                     ],
                                   );
                                 }).toList(),
@@ -6160,7 +7043,7 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                             Navigator.of(context).pop();
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue.shade600,
+                            backgroundColor: const Color(0xFFDC2626),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(
@@ -6725,23 +7608,28 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
                     if (isAdminn || isSuserr)
                       Row(
                         children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit, size: 18),
-                            onPressed: () => _showEditDialog(realIndex),
-                            color: Colors.blue,
-                          ),
+                          // Validate button (Effectué)
                           IconButton(
                             icon: const Icon(Icons.check, size: 18),
                             onPressed: () =>
                                 _changeOrderState(realIndex, 'Effectué'),
                             color: Colors.green,
                           ),
+                          // Not Validate button (Rejeté)
                           IconButton(
                             icon: const Icon(Icons.close, size: 18),
                             onPressed: () =>
                                 _changeOrderState(realIndex, 'Rejeté'),
                             color: Colors.red,
                           ),
+                          // Additional admin-only buttons
+                          if (isAdminn) ...[
+                            IconButton(
+                              icon: const Icon(Icons.edit, size: 18),
+                              onPressed: () => _showEditDialog(realIndex),
+                              color: Colors.blue,
+                            ),
+                          ],
                         ],
                       ),
                   ],
@@ -6757,17 +7645,22 @@ class _PurchaseOrdersPageState extends State<PurchaseOrdersPage> {
   Color _stateColor(String state) {
     switch (state) {
       case 'Effectué':
-        return Colors.green;
+        return const Color.fromARGB(255, 27, 138, 27); // Dark grey for success
       case 'En attente':
-        return Colors.orange;
+        return const Color.fromARGB(
+          255,
+          247,
+          212,
+          14,
+        ); // Medium grey for pending
       case 'Rejeté':
-        return Colors.red;
+        return const Color(0xFFDC2626); // Primary red for rejection
       case 'Numéro incorrecte':
-        return Colors.purple;
+        return const Color(0xFFDC2626); // Primary red for errors
       case 'Problème solde':
-        return Colors.amber;
+        return const Color(0xFFDC2626); // Primary red for problems
       default:
-        return Colors.grey;
+        return const Color(0xFF9CA3AF); // Light grey for unknown
     }
   }
 
@@ -7399,7 +8292,7 @@ class _VisualProductSelectorWidgetState
                           children: [
                             Icon(
                               Icons.shopping_cart_outlined,
-                              color: Colors.blue.shade600,
+                              color: const Color(0xFFDC2626),
                               size: 16,
                             ),
                             const SizedBox(width: 6),

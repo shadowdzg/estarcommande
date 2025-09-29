@@ -27,22 +27,46 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Air Time',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.red),
+        // 🎨 New monochrome theme with red accent
+        colorScheme: const ColorScheme.light(
+          primary: Color(0xFFDC2626), // Primary red
+          onPrimary: Colors.white,
+          secondary: Color(0xFF1F2937), // Dark grey
+          onSecondary: Colors.white,
+          surface: Colors.white,
+          onSurface: Color(0xFF1F2937),
+          background: Color(0xFFF9FAFB), // Light grey background
+          onBackground: Color(0xFF1F2937),
+          error: Color(0xFFDC2626),
+          onError: Colors.white,
+        ),
+        scaffoldBackgroundColor: const Color(0xFFF9FAFB), // Light grey
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFFDC2626), // Primary red
+          foregroundColor: Colors.white,
+          elevation: 0,
+          titleTextStyle: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        cardTheme: const CardThemeData(
+          color: Colors.white,
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(12)),
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFDC2626),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
       ),
       home: const EntryPoint(),
     );
@@ -198,9 +222,9 @@ class _EntryPointState extends State<EntryPoint> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFFFFEBEE), // Very light red/pink
-              Color(0xFFFFCDD2), // Light red/pink
-              Color(0xFFEF9A9A), // Soft red
+              Color(0xFFF9FAFB), // Light grey
+              Color(0xFFE5E7EB), // Medium grey
+              Color(0xFFD1D5DB), // Darker grey
             ],
           ),
         ),
@@ -238,7 +262,7 @@ class _EntryPointState extends State<EntryPoint> {
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: Colors.black, // Black text
                     shadows: [
                       Shadow(
                         offset: Offset(0, 2),
@@ -270,7 +294,7 @@ class _EntryPointState extends State<EntryPoint> {
                         const Icon(
                           Icons.error_outline,
                           size: 48,
-                          color: Colors.red,
+                          color: Color(0xFFDC2626), // Primary red
                         ),
                         const SizedBox(height: 16),
                         const Text(
@@ -278,7 +302,7 @@ class _EntryPointState extends State<EntryPoint> {
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: Colors.red,
+                            color: Color(0xFFDC2626),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -296,7 +320,7 @@ class _EntryPointState extends State<EntryPoint> {
                           icon: const Icon(Icons.refresh),
                           label: const Text('Réessayer'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
+                            backgroundColor: const Color(0xFFDC2626),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(
                               horizontal: 24,
@@ -329,7 +353,9 @@ class _EntryPointState extends State<EntryPoint> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         const CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFFDC2626),
+                          ),
                           strokeWidth: 3,
                         ),
                         const SizedBox(height: 20),

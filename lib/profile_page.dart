@@ -44,7 +44,7 @@ class _ProfilePageState extends State<ProfilePage> {
             Text(message),
           ],
         ),
-        backgroundColor: Colors.red.shade600,
+        backgroundColor: const Color(0xFFDC2626),
         duration: const Duration(seconds: 3),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -117,7 +117,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profil'),
-        backgroundColor: Colors.red.shade600,
+        backgroundColor: const Color(0xFFDC2626),
         foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
@@ -133,11 +133,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     children: [
                       CircleAvatar(
                         radius: 50,
-                        backgroundColor: Colors.red.shade100,
+                        backgroundColor: const Color(0xFFFEF2F2),
                         child: Icon(
                           Icons.person,
                           size: 50,
-                          color: Colors.red.shade600,
+                          color: const Color(0xFFDC2626),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -168,7 +168,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           children: [
                             Icon(
                               Icons.security,
-                              color: Colors.red.shade600,
+                              color: const Color(0xFFDC2626),
                               size: 24,
                             ),
                             const SizedBox(width: 12),
@@ -261,7 +261,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 : () =>
                                       _changePassword(_passwordController.text),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red.shade600,
+                              backgroundColor: const Color(0xFFDC2626),
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),

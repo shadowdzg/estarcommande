@@ -6,6 +6,9 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'settings.dart';
 import 'profile_page.dart';
+import 'services/network_service.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'dart:async';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({Key? key}) : super(key: key);
@@ -21,6 +24,83 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
   bool _isServerDown = false;
 
+  // Network and server state
+  final NetworkService _networkService = NetworkService();
+  ServerConfiguration? _currentServerConfig;
+  String _connectivityStatus = 'Checking...';
+  bool _isOnline = false;
+  bool _showServerOptions = false;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeNetworkStatus();
+    _setupConnectivityListener();
+  }
+
+  @override
+  void dispose() {
+    _connectivitySubscription?.cancel();
+    super.dispose();
+  }
+
+  void _setupConnectivityListener() {
+    _connectivitySubscription = _networkService.connectivityStream.listen((_) {
+      _checkConnectivityStatus();
+    });
+  }
+
+  Future<void> _initializeNetworkStatus() async {
+    await _checkConnectivityStatus();
+    await _getBestServer();
+  }
+
+  Future<void> _checkConnectivityStatus() async {
+    final isOnline = await _networkService.hasInternetConnectivity();
+    final description = await _networkService.getConnectivityDescription();
+
+    if (mounted) {
+      setState(() {
+        _isOnline = isOnline;
+        _connectivityStatus = description;
+      });
+    }
+  }
+
+  Future<void> _getBestServer() async {
+    final serverConfig = await _networkService.getBestAvailableServer();
+    if (mounted) {
+      setState(() {
+        _currentServerConfig = serverConfig;
+      });
+    }
+  }
+
+  Future<void> _switchServer(ServerType serverType) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    await _networkService.setPreferredServerType(serverType);
+    await _getBestServer();
+
+    setState(() {
+      _isLoading = false;
+      _showServerOptions = false;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Switched to ${_currentServerConfig?.displayName ?? 'server'}',
+        ),
+        backgroundColor: Colors.green.shade600,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   void _login() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -30,9 +110,16 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
+      if (_currentServerConfig == null || !_currentServerConfig!.isAvailable) {
+        _showError('No server available. Please check your connection.');
+        return;
+      }
+
+      final loginUrl = '${_currentServerConfig!.apiBaseUrl}/auth/login';
+
       final response = await http
           .post(
-            Uri.parse('http://estcommand.ddns.net:8080/api/v1/auth/login'),
+            Uri.parse(loginUrl),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'username': emailController.text.trim(),
@@ -188,7 +275,12 @@ class _LoginPageState extends State<LoginPage> {
                           fontWeight: FontWeight.w400,
                         ),
                       ),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
+
+                      // Network status and server info
+                      _buildNetworkStatusCard(),
+
+                      const SizedBox(height: 24),
                       Form(
                         key: _formKey,
                         child: Column(
@@ -220,7 +312,13 @@ class _LoginPageState extends State<LoginPage> {
                                 return null;
                               },
                             ),
-                            const SizedBox(height: 32),
+                            const SizedBox(height: 24),
+
+                            // Server selection button
+                            _buildServerSelectionButton(),
+
+                            const SizedBox(height: 16),
+
                             // Server status indicator
                             if (_isServerDown)
                               Container(
@@ -415,6 +513,169 @@ class _LoginPageState extends State<LoginPage> {
             color: Colors.red.shade600,
             fontSize: 12,
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNetworkStatusCard() {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Icon(
+                  _isOnline ? Icons.wifi : Icons.wifi_off,
+                  color: _isOnline ? Colors.green : Colors.red,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _connectivityStatus,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey.shade700,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (_currentServerConfig != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(
+                    _currentServerConfig!.isAvailable
+                        ? Icons.cloud_done
+                        : Icons.cloud_off,
+                    color: _currentServerConfig!.isAvailable
+                        ? Colors.green
+                        : Colors.orange,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _currentServerConfig!.isAvailable
+                          ? _currentServerConfig!.displayName
+                          : 'Server unavailable',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildServerSelectionButton() {
+    return Container(
+      width: double.infinity,
+      child: Column(
+        children: [
+          ElevatedButton.icon(
+            onPressed: () {
+              setState(() {
+                _showServerOptions = !_showServerOptions;
+              });
+            },
+            icon: Icon(
+              _showServerOptions ? Icons.expand_less : Icons.expand_more,
+              size: 20,
+            ),
+            label: Text(
+              'Server Options',
+              style: GoogleFonts.poppins(fontSize: 14),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.grey.shade100,
+              foregroundColor: Colors.grey.shade700,
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          if (_showServerOptions) ...[
+            const SizedBox(height: 12),
+            _buildServerOptionCard(ServerType.online),
+            const SizedBox(height: 8),
+            _buildServerOptionCard(ServerType.local),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildServerOptionCard(ServerType serverType) {
+    final isSelected = _currentServerConfig?.type == serverType;
+    final displayName = serverType == ServerType.local
+        ? '🏠 Local Server (192.168.200.33)'
+        : '🌍 Online Server (estcommand.ddns.net)';
+    final description = serverType == ServerType.local
+        ? 'Fast, local network only'
+        : 'Accessible from anywhere';
+
+    return InkWell(
+      onTap: _isLoading ? null : () => _switchServer(serverType),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.blue.shade50 : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? Colors.blue.shade300 : Colors.grey.shade200,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              isSelected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              color: isSelected ? Colors.blue.shade600 : Colors.grey.shade500,
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    displayName,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected
+                          ? Colors.blue.shade700
+                          : Colors.grey.shade800,
+                    ),
+                  ),
+                  Text(
+                    description,
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

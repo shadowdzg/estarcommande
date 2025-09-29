@@ -280,8 +280,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         ],
         flexibleSpace: Container(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.red.shade300, Colors.red.shade700],
+            gradient: const LinearGradient(
+              colors: [Color(0xFFDC2626), Color(0xFFB91C1C)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -290,10 +290,10 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       ),
       body: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
+          gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Colors.red.shade50, Colors.red.shade100],
+            colors: [Color(0xFFF9FAFB), Color(0xFFE5E7EB)],
           ),
         ),
         child: Padding(
@@ -413,6 +413,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       if (_isDisposed || !mounted) return;
 
       if (token.isEmpty) {
+        print('DEBUG: Test Connection - No Auth Token');
         _connectionStatus = 'No Auth Token ❌';
         if (mounted && !_isDisposed) {
           setState(() {
@@ -423,13 +424,18 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       }
 
       final serverHost = _useLocalServer
-          ? '192.168.200.34'
+          ? '192.168.200.33'
           : 'estcommand.ddns.net';
+
+      final testUrl = 'http://$serverHost:8080/api/v1/commands?take=1';
+      print('DEBUG: Test Connection - Testing URL: $testUrl');
+      print('DEBUG: Test Connection - Using local server: $_useLocalServer');
+      print('DEBUG: Test Connection - Token length: ${token.length}');
 
       // Include JWT token in the request
       final response = await http
           .get(
-            Uri.parse('http://$serverHost:8080/api/v1/commands?take=1'),
+            Uri.parse(testUrl),
             headers: {
               'Content-Type': 'application/json',
               'Authorization': 'Bearer $token',
@@ -437,19 +443,30 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           )
           .timeout(Duration(seconds: 5));
 
+      print('DEBUG: Test Connection - Response Status: ${response.statusCode}');
+      print('DEBUG: Test Connection - Response Body: ${response.body}');
+      print('DEBUG: Test Connection - Response Headers: ${response.headers}');
+
       // Check again after network request
       if (_isDisposed || !mounted) return;
 
       if (response.statusCode == 200) {
+        print('DEBUG: Test Connection - SUCCESS: Connected');
         _connectionStatus = 'Connected ✅';
       } else if (response.statusCode == 401) {
+        print('DEBUG: Test Connection - FAILED: Auth Failed (401)');
         _connectionStatus = 'Auth Failed (401) ❌';
       } else {
+        print(
+          'DEBUG: Test Connection - FAILED: Server Error ${response.statusCode}',
+        );
+        print('DEBUG: Test Connection - Error Response: ${response.body}');
         _connectionStatus = 'Error ${response.statusCode} ❌';
       }
     } catch (e) {
       // Check again after exception
       if (_isDisposed || !mounted) return;
+      print('DEBUG: Test Connection - EXCEPTION: $e');
       _connectionStatus = 'Failed ❌ ($e)';
     }
 
@@ -492,7 +509,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                   RadioListTile<bool>(
                     title: Text('🏠 Local Server'),
                     subtitle: Text(
-                      '192.168.200.34:8080 - Fast, local network only',
+                      '192.168.200.33:8080 - Fast, local network only',
                     ),
                     value: true,
                     groupValue: _useLocalServer,
@@ -597,7 +614,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                     title: Text('Current Server'),
                     subtitle: Text(
                       _useLocalServer
-                          ? '🏠 Local (192.168.200.34:8080)'
+                          ? '🏠 Local (192.168.200.33:8080)'
                           : '🌍 Internet (estcommand.ddns.net:8080)',
                     ),
                   ),

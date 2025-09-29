@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'network_service.dart';
 
 class ApiException implements Exception {
   final String message;
@@ -29,13 +30,18 @@ class ApiResponse<T> {
 }
 
 class ApiService {
-  static const String baseUrl = 'http://estcommand.ddns.net:8080/api/v1';
   static const Duration defaultTimeout = Duration(seconds: 30);
+  final NetworkService _networkService = NetworkService();
 
   // Singleton pattern
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();
+
+  Future<String> get baseUrl async {
+    final serverConfig = await _networkService.getBestAvailableServer();
+    return serverConfig.apiBaseUrl;
+  }
 
   Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -56,7 +62,8 @@ class ApiService {
     Map<String, dynamic>? data,
     Duration? timeout,
   }) async {
-    final uri = Uri.parse('$baseUrl$endpoint');
+    final currentBaseUrl = await baseUrl;
+    final uri = Uri.parse('$currentBaseUrl$endpoint');
     final headers = await _getHeaders();
 
     try {
@@ -111,10 +118,11 @@ class ApiService {
     String endpoint,
     Map<String, dynamic>? data,
     http.Response response,
-  ) {
+  ) async {
     print('=== API SERVICE REQUEST DEBUG ===');
     print('[$method] $endpoint -> ${response.statusCode}');
-    print('Full URL: $baseUrl$endpoint');
+    final currentBaseUrl = await baseUrl;
+    print('Full URL: $currentBaseUrl$endpoint');
     if (data != null) {
       print('Request body: ${jsonEncode(data)}');
     }

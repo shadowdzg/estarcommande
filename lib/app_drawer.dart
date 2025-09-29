@@ -44,9 +44,9 @@ class AppDrawer extends StatelessWidget {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Color(0xFFFFEBEE), // Very light red/pink
-                  Color(0xFFFFCDD2), // Light red/pink
-                  Color(0xFFEF9A9A), // Soft red
+                  Color(0xFFF9FAFB), // Light grey
+                  Color(0xFFE5E7EB), // Medium grey
+                  Color(0xFFD1D5DB), // Darker grey
                 ],
               ),
             ),
@@ -55,13 +55,13 @@ class AppDrawer extends StatelessWidget {
               children: <Widget>[
                 Container(
                   height: 180,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        Color(0xFFE57373), // Soft red
-                        Color(0xFFD32F2F), // Medium red
+                        Color(0xFFDC2626), // Primary red
+                        Color(0xFFB91C1C), // Darker red
                       ],
                     ),
                   ),
@@ -87,7 +87,7 @@ class AppDrawer extends StatelessWidget {
                           Text(
                             'EST STAR',
                             style: GoogleFonts.poppins(
-                              color: Colors.white,
+                              color: Colors.black,
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
                             ),
@@ -95,7 +95,7 @@ class AppDrawer extends StatelessWidget {
                           Text(
                             'Gestion des Commandes',
                             style: GoogleFonts.poppins(
-                              color: Colors.white.withValues(alpha: 0.9),
+                              color: Colors.black.withOpacity(0.8),
                               fontSize: 14,
                               fontWeight: FontWeight.w400,
                             ),
@@ -118,12 +118,12 @@ class AppDrawer extends StatelessWidget {
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.red.shade100,
+                        color: const Color(0xFFFEF2F2), // Light red tint
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.receipt_long,
-                        color: Colors.red.shade700,
+                        color: Color(0xFFDC2626), // Primary red
                         size: 20,
                       ),
                     ),
@@ -162,12 +162,12 @@ class AppDrawer extends StatelessWidget {
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.blue.shade100,
+                        color: const Color(0xFFF3F4F6), // Light grey
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.analytics,
-                        color: Colors.blue.shade700,
+                        color: Color(0xFF374151), // Dark grey
                         size: 20,
                       ),
                     ),
@@ -207,12 +207,12 @@ class AppDrawer extends StatelessWidget {
                       leading: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.purple.shade100,
+                          color: const Color(0xFFE5E7EB), // Medium grey
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.admin_panel_settings,
-                          color: Colors.purple.shade700,
+                          color: Color(0xFF1F2937), // Dark grey
                           size: 20,
                         ),
                       ),
@@ -251,12 +251,12 @@ class AppDrawer extends StatelessWidget {
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.green.shade100,
+                        color: const Color(0xFFF3F4F6), // Light grey
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.account_circle,
-                        color: Colors.green.shade700,
+                        color: Color(0xFF6B7280), // Medium grey
                         size: 20,
                       ),
                     ),
@@ -299,12 +299,12 @@ class AppDrawer extends StatelessWidget {
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.orange.shade100,
+                        color: const Color(0xFFE5E7EB), // Medium grey
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.smart_toy,
-                        color: Colors.orange.shade700,
+                        color: Color(0xFF374151), // Dark grey
                         size: 20,
                       ),
                     ),
@@ -343,12 +343,12 @@ class AppDrawer extends StatelessWidget {
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.teal.shade100,
+                        color: const Color(0xFFF3F4F6), // Light grey
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.system_update_alt,
-                        color: Colors.teal.shade700,
+                        color: Color(0xFF6B7280), // Medium grey
                         size: 20,
                       ),
                     ),
@@ -377,20 +377,25 @@ class AppDrawer extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.red.shade100.withValues(alpha: 0.3),
+                    color: const Color(
+                      0xFFFEF2F2,
+                    ).withValues(alpha: 0.7), // Light red tint
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.red.shade300, width: 1),
+                    border: Border.all(
+                      color: const Color(0xFFDC2626),
+                      width: 1,
+                    ),
                   ),
                   child: ListTile(
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.red.shade100,
+                        color: const Color(0xFFFEF2F2), // Light red tint
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.exit_to_app,
-                        color: Colors.red.shade700,
+                        color: Color(0xFFDC2626), // Primary red
                         size: 20,
                       ),
                     ),
@@ -398,13 +403,13 @@ class AppDrawer extends StatelessWidget {
                       'Déconnexion',
                       style: GoogleFonts.poppins(
                         fontWeight: FontWeight.w600,
-                        color: Colors.red.shade700,
+                        color: const Color(0xFFDC2626),
                       ),
                     ),
                     trailing: Icon(
                       Icons.arrow_forward_ios,
                       size: 16,
-                      color: Colors.red.shade600,
+                      color: const Color(0xFFDC2626),
                     ),
                     onTap: () async {
                       final prefs = await SharedPreferences.getInstance();
