@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model clients {
+  clientsID  String     @id @db.VarChar(10)
+  clientName String?    @db.Char(50)
+  createdAt  DateTime   @default(now()) @db.DateTime(0)
+  updatedAt  DateTime   @default(now()) @db.DateTime(0)
+  telephone  String?    @db.VarChar(50)
+  wilaya     String?    @db.VarChar(50)
+  userID     String?    @unique(map: "userID") @db.Char(36)
+  zoneID     String?    @db.Char(36)
+  newID      String?    @db.Char(36)
+  zones      zones?     @relation(fields: [zoneID], references: [zoneID], onDelete: Restrict, onUpdate: Restrict, map: "fk_client_zone")
+  users      users?     @relation(fields: [userID], references: [usersID], map: "fk_clients_user")
+  commands   commands[]
+
+  @@index([zoneID], map: "idx_clients_zoneID")
+}
+
+model commands {
+  id          Int       @id @default(autoincrement())
+  operator    String?   @db.VarChar(50)
+  amount      Int?      @default(0)
+  UsersID     String?   @db.Char(36)
+  ClientsID   String?   @db.VarChar(10)
+  createdAt   DateTime? @default(now()) @db.DateTime(0)
+  updatedAt   DateTime? @default(now()) @db.DateTime(0)
+  isValidated String?   @default("Encours") @db.VarChar(50)
+  pourcentage String?   @db.VarChar(50)
+  number      String?   @default("") @db.VarChar(50)
+  accepted    Boolean?  @default(false)
+  acceptedBy  String?   @db.VarChar(50)
+  newClientID String?   @db.Char(36)
+  clients     clients?  @relation(fields: [ClientsID], references: [clientsID], onUpdate: Restrict, map: "fk_client")
+  users       users?    @relation(fields: [UsersID], references: [usersID], onUpdate: Restrict, map: "fk_user")
+
+  @@index([ClientsID], map: "WDIDX_commands_ClientsID")
+  @@index([UsersID], map: "WDIDX_commands_UsersID")
+}
+
+model fournisseurs {
+  fournisseurID String    @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  name          String?   @db.VarChar(100)
+  phone         String?   @db.VarChar(50)
+  createdAt     DateTime? @default(now()) @db.DateTime(0)
+  updatedAt     DateTime? @default(now()) @db.DateTime(0)
+}
+
+model products {
+  productID    String    @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  productName  String?   @db.VarChar(100)
+  initialPrice Float?    @default(0) @db.Float
+  createdAt    DateTime? @default(now()) @db.DateTime(0)
+  updatedAt    DateTime? @default(now()) @db.DateTime(0)
+}
+
+model users {
+  usersID       String     @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  username      String?    @unique(map: "username") @db.Char(50)
+  password      String?    @db.VarChar(255)
+  createdAt     DateTime?  @default(dbgenerated("(curdate())")) @db.Date
+  updatedAt     DateTime?  @default(dbgenerated("(curdate())")) @db.Date
+  isAdmin       Int?       @default(0) @db.TinyInt
+  isSuperUser   Int?       @default(0) @db.TinyInt
+  isCommercUser Int?       @default(0) @db.TinyInt
+  isclient      Int?       @default(0) @db.TinyInt
+  isDelegue     Int?       @default(0) @db.TinyInt
+  clients       clients?
+  commands      commands[]
+  zones         zones[]
+}
+
+model zones {
+  zoneID      String    @id @default(dbgenerated("(uuid())")) @db.Char(36)
+  name        String?   @unique(map: "name") @db.VarChar(100)
+  ObjVentes   Int?      @default(0)
+  PrReaVente  String?   @db.VarChar(50)
+  ventes      Int?      @default(0)
+  resteVente  Int?      @default(0)
+  SFRecouv    Int?      @default(0)
+  Recouv      Int?      @default(0)
+  resteRecouv Int?      @default(0)
+  PrRecouv    String?   @db.VarChar(50)
+  userID      String?   @db.Char(36)
+  created_at  DateTime? @default(now()) @db.Timestamp(0)
+  updated_at  DateTime? @default(now()) @db.Timestamp(0)
+  clients     clients[]
+  users       users?    @relation(fields: [userID], references: [usersID], onUpdate: Restrict, map: "fk_zone_user")
+
+  @@index([userID], map: "idx_zones_userID")
+}
